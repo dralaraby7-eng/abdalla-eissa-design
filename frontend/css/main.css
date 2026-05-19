@@ -643,7 +643,6 @@ input, textarea, select { font-family: inherit; outline: none; border: none; }
   border-radius: var(--radius-lg);
   padding: 1.5rem;
   margin-bottom: 1.25rem;
-  position: relative;
 }
 .prompt-block-label {
   font-size: 0.75rem;
@@ -654,20 +653,35 @@ input, textarea, select { font-family: inherit; outline: none; border: none; }
   margin-bottom: 0.75rem;
 }
 .prompt-text {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   color: var(--text-primary);
-  line-height: 1.8;
+  line-height: 1.85;
   white-space: pre-wrap;
   word-break: break-word;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  max-height: 340px;
+  overflow-y: auto;
+  font-family: inherit;
+  margin-bottom: 0.85rem;
+  scroll-behavior: smooth;
 }
 .prompt-text.blurred {
   filter: blur(4px);
   user-select: none;
   pointer-events: none;
+  max-height: 120px;
+  overflow: hidden;
 }
 .prompt-copy-btn {
-  position: absolute;
-  top: 1rem; right: 1rem;
+  display: flex !important;
+  width: 100%;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.95rem;
 }
 .prompt-locked-overlay {
   background: linear-gradient(180deg, transparent 0%, var(--bg-card) 60%);
