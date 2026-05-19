@@ -1305,6 +1305,30 @@ footer {
 .plan-free { background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border); }
 .plan-premium { background: linear-gradient(90deg, #92400e, #b45309); color: #fcd34d; }
 
+/* Google sign-in button */
+.google-signin-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 0.7rem 1.25rem;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-hover);
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: inherit;
+}
+.google-signin-btn:hover {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.2);
+}
+.google-signin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Textarea */
 textarea.form-input { resize: vertical; min-height: 120px; }
 

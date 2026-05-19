@@ -12,8 +12,7 @@ PAYMOB_API_KEY    = os.getenv("PAYMOB_API_KEY")
 INTEGRATION_ID    = int(os.getenv("PAYMOB_INTEGRATION_ID", "0"))
 IFRAME_ID         = os.getenv("PAYMOB_IFRAME_ID")
 HMAC_SECRET       = os.getenv("PAYMOB_HMAC_SECRET", "")
-PRICE_MONTHLY     = int(os.getenv("PRICE_MONTHLY_CENTS", "19900"))
-PRICE_YEARLY      = int(os.getenv("PRICE_YEARLY_CENTS", "178800"))
+PRICE_LIFETIME_EGP = int(os.getenv("PRICE_LIFETIME_EGP_CENTS", "25000"))   # 250 EGP
 FRONTEND_URL      = os.getenv("FRONTEND_URL", "http://localhost:5500")
 
 PAYMOB_BASE = "https://accept.paymob.com/api"
@@ -22,7 +21,7 @@ PAYMOB_BASE = "https://accept.paymob.com/api"
 class OrderRequest(BaseModel):
     user_id: str
     email: str
-    billing: str = "monthly"   # "monthly" | "yearly"
+    billing: str = "lifetime_egp"   # "lifetime_egp" (250 EGP) | future: "lifetime_usd"
 
 
 def _get_auth_token() -> str:
@@ -66,7 +65,7 @@ def _get_payment_key(auth_token: str, order_id: int, amount_cents: int, email: s
 
 @router.post("/create-order")
 async def create_order(body: OrderRequest):
-    amount = PRICE_YEARLY if body.billing == "yearly" else PRICE_MONTHLY
+    amount = PRICE_LIFETIME_EGP   # always lifetime now
     try:
         auth = _get_auth_token()
         order_id = _create_order(auth, amount)
@@ -107,19 +106,20 @@ async def payment_webhook(request: Request):
     if not obj.get("success"):
         return {"status": "ignored", "reason": "payment not successful"}
 
-    # The order's merchant order data should carry user_id — set via metadata
-    # For now we match by email stored in billing_data
     email = obj.get("order", {}).get("shipping_data", {}).get("email", "")
-    billing = obj.get("amount_cents", PRICE_MONTHLY)
-    months = 12 if billing >= PRICE_YEARLY else 1
 
-    expires = datetime.utcnow() + timedelta(days=30 * months)
-
-    # Update user plan via Supabase service key
+    # Grant lifetime premium (no expiry)
     result = supabase.table("profiles").update({
         "plan_type": "premium",
-        "subscription_expires_at": expires.isoformat(),
+        "subscription_expires_at": None,   # lifetime — never expires
         "paymob_order_id": str(obj.get("order", {}).get("id", ""))
-    }).eq("id", obj.get("order", {}).get("merchant_order_id", "UNKNOWN")).execute()
+    }).eq("email", email).execute()
+
+    if not (result.data):
+        # Fallback: match by merchant_order_id stored in user_id field
+        supabase.table("profiles").update({
+            "plan_type": "premium",
+            "subscription_expires_at": None
+        }).eq("id", obj.get("order", {}).get("merchant_order_id", "UNKNOWN")).execute()
 
     return {"status": "ok"}

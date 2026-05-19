@@ -37,12 +37,12 @@
 <div class="page-wrapper">
   <section class="hero" style="padding:4rem 2rem 3rem;">
     <div class="hero-eyebrow"><i class="fa-solid fa-crown"></i> Simple Pricing</div>
-    <h1>Choose Your <span class="gradient-text">Plan</span></h1>
-    <p>Start free, upgrade when you need full access to all AI ad prompts.</p>
+    <h1>One Payment, <span class="gradient-text">Lifetime Access</span></h1>
+    <p>Pay once and unlock all AI ad prompts forever — no monthly fees, no renewals.</p>
   </section>
 
   <section class="section">
-    <div class="pricing-grid">
+    <div class="pricing-grid" style="max-width:960px;">
 
       <!-- Free Plan -->
       <div class="pricing-card">
@@ -54,74 +54,110 @@
         </div>
         <p class="pricing-desc">Get started with no credit card required.</p>
         <div class="pricing-features">
-          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Browse all categories</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Browse all 12 categories</div>
           <div class="pricing-feature"><i class="fa-solid fa-check"></i> View all style images</div>
           <div class="pricing-feature"><i class="fa-solid fa-check"></i> Preview first 140 chars of any prompt</div>
           <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> Copy full prompts</div>
           <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> Access premium styles</div>
-          <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> New styles weekly</div>
+          <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> New styles added regularly</div>
         </div>
         <a href="auth.html?tab=signup" class="btn btn-outline" style="width:100%;justify-content:center;padding:0.75rem;">
           Get Started Free
         </a>
       </div>
 
-      <!-- Premium Plan -->
-      <div class="pricing-card featured">
-        <div class="pricing-badge"><i class="fa-solid fa-crown"></i> Most Popular</div>
+      <!-- Lifetime Premium Plan -->
+      <div class="pricing-card featured" style="position:relative;">
+        <div class="pricing-badge"><i class="fa-solid fa-infinity"></i> Lifetime Access</div>
         <div class="pricing-name">Premium</div>
+        <p class="pricing-desc" style="margin-bottom:1.25rem;">Pay once. Access everything, forever.</p>
 
-        <!-- Billing toggle -->
-        <div style="margin-bottom:1.25rem;">
-          <div style="display:flex;gap:0.5rem;background:var(--bg-base);border-radius:var(--radius-md);padding:3px;margin-bottom:0.75rem;">
-            <button onclick="setBilling('monthly')" id="btnMonthly" class="auth-tab active" style="flex:1;font-size:0.8rem;">Monthly</button>
-            <button onclick="setBilling('yearly')" id="btnYearly" class="auth-tab" style="flex:1;font-size:0.8rem;">Yearly <span style="color:#34d399;font-size:0.7rem;">-25%</span></button>
+        <!-- Egyptian pricing -->
+        <div class="pricing-option" id="optionEGP">
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+            <span style="font-size:1.2rem;">🇪🇬</span>
+            <span style="font-size:0.82rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Egyptian Users</span>
           </div>
           <div class="pricing-price">
-            <span class="amount" id="priceAmount">199</span>
+            <span class="amount">250</span>
             <span class="currency">EGP</span>
-            <span class="period" id="pricePeriod">/ month</span>
+            <span class="period">one-time</span>
           </div>
-          <p id="priceSub" class="pricing-desc">Billed monthly. Cancel anytime.</p>
         </div>
 
+        <!-- Divider -->
+        <div style="border-top:1px solid var(--border);margin:1.25rem 0;"></div>
+
+        <!-- International pricing -->
+        <div class="pricing-option" id="optionUSD">
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+            <span style="font-size:1.2rem;">🌍</span>
+            <span style="font-size:0.82rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">International Users</span>
+          </div>
+          <div class="pricing-price">
+            <span class="amount">10</span>
+            <span class="currency">USD</span>
+            <span class="period">one-time</span>
+          </div>
+        </div>
+
+        <div style="margin:1.25rem 0 1.5rem;">
         <div class="pricing-features">
           <div class="pricing-feature"><i class="fa-solid fa-check"></i> Everything in Free</div>
-          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Copy full AI prompts</div>
-          <div class="pricing-feature"><i class="fa-solid fa-check"></i> All 500+ ad styles</div>
-          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Access all premium styles</div>
-          <div class="pricing-feature"><i class="fa-solid fa-check"></i> New styles added weekly</div>
-          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Priority support</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Copy all AI prompts instantly</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> All 500+ ad styles unlocked</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> All premium styles</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> New styles added regularly</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> <strong style="color:var(--blue-300);">Lifetime access — no renewals</strong></div>
+        </div>
         </div>
 
-        <button onclick="handleUpgrade()" class="btn btn-primary" style="width:100%;justify-content:center;padding:0.75rem;" id="upgradeBtn">
-          <i class="fa-solid fa-crown"></i> <span id="upgradeBtnText">Get Premium</span>
+        <!-- EGP button -->
+        <button onclick="handleUpgradeEGP()" class="btn btn-primary" style="width:100%;justify-content:center;padding:0.75rem;margin-bottom:0.6rem;" id="upgradeBtnEGP">
+          <span>🇪🇬</span> Pay 250 EGP — Unlock Forever
         </button>
-        <p style="font-size:0.75rem;color:var(--text-muted);text-align:center;margin-top:0.6rem;">Secure payment via Paymob</p>
+        <p style="font-size:0.72rem;color:var(--text-muted);text-align:center;margin-bottom:1rem;">Secure payment via Paymob &nbsp;•&nbsp; Egyptian cards &amp; wallets</p>
+
+        <!-- USD button -->
+        <a id="upgradeBtnUSD" href="https://wa.me/201065479474?text=I%20want%20to%20get%20Premium%20for%20%2410%20USD%20-%20Abdalla%20Eissa%20for%20Design" target="_blank" rel="noopener"
+           class="btn btn-outline" style="width:100%;justify-content:center;padding:0.75rem;">
+          <i class="fa-brands fa-whatsapp" style="color:#25D366;font-size:1.1rem;"></i> Pay $10 USD via WhatsApp
+        </a>
+        <p style="font-size:0.72rem;color:var(--text-muted);text-align:center;margin-top:0.5rem;">Contact us on WhatsApp → confirm payment → instant access</p>
       </div>
 
     </div>
 
     <!-- FAQ -->
-    <div style="max-width:640px;margin:4rem auto 0;">
+    <div style="max-width:680px;margin:4rem auto 0;">
       <h2 style="text-align:center;font-size:1.4rem;color:var(--white);margin-bottom:2rem;">Frequently Asked Questions</h2>
       <div style="display:flex;flex-direction:column;gap:1rem;">
+
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;">
-          <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">What AI tools can I use these prompts with?</h3>
-          <p style="font-size:0.85rem;color:var(--text-secondary);">Any! Midjourney, DALL-E 3, Stable Diffusion, Adobe Firefly, Google ImageFX, and more. The prompts are written to work universally.</p>
+          <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">Is this really a one-time payment?</h3>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">Yes. Pay once and your account is Premium forever. No subscriptions, no renewals, no surprises.</p>
         </div>
+
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;">
-          <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">Can I cancel my subscription anytime?</h3>
-          <p style="font-size:0.85rem;color:var(--text-secondary);">Yes. You can cancel at any time from your dashboard. You'll keep premium access until the end of your billing period.</p>
+          <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">How does international payment work?</h3>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">Send us a WhatsApp message, we'll confirm your payment details and activate your account immediately. We accept Paypal, Western Union, or bank transfer.</p>
         </div>
+
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;">
-          <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">Do the prompts include my reference image?</h3>
-          <p style="font-size:0.85rem;color:var(--text-secondary);">The prompt is text-only — you provide your own reference/product image when generating. The prompt tells the AI the style, mood, lighting, and layout to apply to your image.</p>
+          <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">What AI tools work with these prompts?</h3>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">Any AI image generator — Midjourney, DALL-E 3, Stable Diffusion, Adobe Firefly, Google ImageFX. The prompts are written to work universally.</p>
         </div>
+
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;">
+          <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">What if I need help using the prompts?</h3>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">Each prompt includes step-by-step instructions on how to use it. You can also reach us on WhatsApp for direct support.</p>
+        </div>
+
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;">
           <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">Is payment secure?</h3>
-          <p style="font-size:0.85rem;color:var(--text-secondary);">Yes. All payments are processed securely through Paymob, Egypt's leading payment gateway. We never store your card details.</p>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">Egyptian payments are processed securely through Paymob, Egypt's leading payment gateway. We never store your card details.</p>
         </div>
+
       </div>
     </div>
   </section>
@@ -131,7 +167,7 @@
   <div class="footer-inner">
     <div class="footer-logo"><div class="logo-icon">🎨</div> Abdalla Eissa for Design</div>
     <div class="footer-links"><a href="index.html">Home</a><a href="pricing.html">Pricing</a><a href="auth.html?tab=login">Login</a></div>
-    <p class="footer-copy">&copy; 2024 Abdalla Eissa for Design.</p>
+    <p class="footer-copy">&copy; 2025 Abdalla Eissa for Design.</p>
   </div>
 </footer>
 
@@ -141,36 +177,22 @@
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
 <script>
-  let billingCycle = 'monthly';
-
   document.addEventListener('DOMContentLoaded', async () => {
     await initAuth();
     document.getElementById('hamburger')?.addEventListener('click', () =>
       document.getElementById('mobileNav')?.classList.toggle('open'));
   });
 
-  function setBilling(cycle) {
-    billingCycle = cycle;
-    document.getElementById('btnMonthly').classList.toggle('active', cycle === 'monthly');
-    document.getElementById('btnYearly').classList.toggle('active', cycle === 'yearly');
-    document.getElementById('priceAmount').textContent = cycle === 'yearly' ? '149' : '199';
-    document.getElementById('pricePeriod').textContent = cycle === 'yearly' ? '/ month' : '/ month';
-    document.getElementById('priceSub').textContent = cycle === 'yearly'
-      ? 'Billed 1,788 EGP yearly. Save 25%.'
-      : 'Billed monthly. Cancel anytime.';
-    document.getElementById('upgradeBtnText').textContent = cycle === 'yearly' ? 'Get Premium (Yearly)' : 'Get Premium';
-  }
-
-  async function handleUpgrade() {
+  async function handleUpgradeEGP() {
     if (!currentUser) {
       window.location.href = 'auth.html?tab=signup&back=' + encodeURIComponent(window.location.href);
       return;
     }
     if (isPremium()) {
-      showToast('You already have Premium!', 'success');
+      showToast('You already have Premium! Enjoy lifetime access.', 'success');
       return;
     }
-    const btn = document.getElementById('upgradeBtn');
+    const btn = document.getElementById('upgradeBtnEGP');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Redirecting to payment…';
 
@@ -181,7 +203,7 @@
         body: JSON.stringify({
           user_id: currentUser.id,
           email: currentUser.email,
-          billing: billingCycle
+          billing: 'lifetime_egp'
         })
       });
       const data = await res.json();
@@ -191,9 +213,9 @@
         throw new Error(data.detail || 'Payment initiation failed');
       }
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(err.message || 'Could not connect to payment server.', 'error');
       btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-crown"></i> <span id="upgradeBtnText">Get Premium</span>';
+      btn.innerHTML = '<span>🇪🇬</span> Pay 250 EGP — Unlock Forever';
     }
   }
 </script>
