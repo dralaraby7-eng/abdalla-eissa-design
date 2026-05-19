@@ -27,6 +27,7 @@ async function fetchProfile(userId) {
 
 function isPremium() {
   if (!currentProfile) return false;
+  if (currentProfile.is_admin) return true; // admins always have full access
   if (currentProfile.plan_type === 'premium') {
     if (!currentProfile.subscription_expires_at) return true;
     return new Date(currentProfile.subscription_expires_at) > new Date();

@@ -151,7 +151,7 @@ async function svOpen(id) {
 
   sb.rpc('increment_view_count', { style_id: id }).catch(() => {});
 
-  const userCan = isPremium() || !style.is_premium;
+  const userCan = isPremium() || isAdmin() || !style.is_premium;
   const promptText = style.meta_prompt || '';
   const preview = promptText.slice(0, FREE_PREVIEW_CHARS);
   const hasMore = promptText.length > FREE_PREVIEW_CHARS;
@@ -188,10 +188,12 @@ async function svOpen(id) {
         <div class="prompt-block-label"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Meta Prompt</div>
 
         ${userCan
-          ? `<div class="prompt-text" id="svPromptText">${escapeHtml(promptText)}</div>
-             <button class="btn btn-primary btn-sm prompt-copy-btn" onclick="svCopyPrompt()">
-               <i class="fa-regular fa-copy"></i> Copy Prompt
-             </button>`
+          ? promptText
+            ? `<div class="prompt-text" id="svPromptText">${escapeHtml(promptText)}</div>
+               <button class="btn btn-primary btn-sm prompt-copy-btn" onclick="svCopyPrompt()">
+                 <i class="fa-regular fa-copy"></i> Copy Prompt
+               </button>`
+            : `<div style="color:var(--text-muted);font-size:0.85rem;padding:1rem 0;">No prompt added yet for this style.</div>`
           : `<div class="prompt-text blurred">${escapeHtml(preview)}${hasMore ? '…' : ''}</div>
              <div class="prompt-locked-overlay">
                <p><i class="fa-solid fa-lock"></i> Upgrade to access the full prompt</p>

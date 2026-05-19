@@ -17,7 +17,7 @@ async function loadStyle(id) {
 
   const { data: style, error } = await sb
     .from('ad_styles')
-    .select(`*, categories(name, slug, icon)`)
+    .select('*')
     .eq('id', id)
     .single();
 
@@ -32,11 +32,17 @@ async function loadStyle(id) {
 
   document.title = `${style.title} | Abdalla Eissa for Design`;
 
+  // Fetch category info separately (avoids FK join errors)
+  let cat = null;
+  if (style.category_id) {
+    const { data } = await sb.from('categories').select('name, slug, icon').eq('id', style.category_id).single();
+    cat = data;
+  }
+
   // Track view count (fire and forget)
   sb.rpc('increment_view_count', { style_id: id }).catch(() => {});
 
-  const cat = style.categories;
-  const userCan = isPremium() || !style.is_premium;
+  const userCan = isPremium() || isAdmin() || !style.is_premium;
   const promptText = style.meta_prompt || '';
   const preview = promptText.slice(0, FREE_PREVIEW_CHARS);
   const hasMore = promptText.length > FREE_PREVIEW_CHARS;
@@ -81,10 +87,12 @@ async function loadStyle(id) {
           <div class="prompt-block-label"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Meta Prompt</div>
 
           ${userCan
-            ? `<div class="prompt-text" id="promptText">${escapeHtml(promptText)}</div>
-               <button class="btn btn-primary btn-sm prompt-copy-btn" onclick="copyPromptText()">
-                 <i class="fa-regular fa-copy"></i> Copy
-               </button>`
+            ? promptText
+              ? `<div class="prompt-text" id="promptText">${escapeHtml(promptText)}</div>
+                 <button class="btn btn-primary btn-sm prompt-copy-btn" onclick="copyPromptText()">
+                   <i class="fa-regular fa-copy"></i> Copy
+                 </button>`
+              : `<div style="color:var(--text-muted);font-size:0.85rem;padding:1rem 0;">No prompt added yet for this style.</div>`
             : `<div class="prompt-text blurred" id="promptText">${escapeHtml(preview)}${hasMore ? '…' : ''}</div>
                <div class="prompt-locked-overlay">
                  <p><i class="fa-solid fa-lock"></i> Upgrade to access the full prompt</p>
