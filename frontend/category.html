@@ -106,6 +106,18 @@
 
 <div id="toastContainer" class="toast-container"></div>
 
+<!-- Style Viewer Modal -->
+<div class="sv-overlay" id="svOverlay" onclick="svCloseBg(event)">
+  <div class="sv-modal" id="svModal">
+    <button class="sv-close-btn" onclick="svClose()" aria-label="Close">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+    <div class="sv-inner" id="svInner">
+      <div class="loading-overlay"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
