@@ -137,7 +137,7 @@ async function svOpen(id) {
 
   const { data: style, error } = await sb
     .from('ad_styles')
-    .select('*, categories(name, slug, icon)')
+    .select('*')
     .eq('id', id)
     .single();
 

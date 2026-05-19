@@ -1349,11 +1349,13 @@ textarea.form-input { resize: vertical; min-height: 120px; }
   justify-content: center;
   padding: 1rem;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.28s ease;
+  transition: opacity 0.28s ease, visibility 0.28s ease;
 }
 .sv-overlay.open {
   opacity: 1;
+  visibility: visible;
   pointer-events: all;
 }
 .sv-modal {
