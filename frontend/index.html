@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Abdalla Eissa for Design — AI Ad Templates</title>
+  <meta name="description" content="Professional AI-ready ad design templates for every business category. Get instant prompt templates to generate stunning ads with AI.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo">
+      <div class="logo-icon">🎨</div>
+      <span>Abdalla Eissa <span class="accent">for Design</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html" class="active">Home</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="auth.html?tab=login">Log In</a>
+    </div>
+    <div class="nav-actions" id="navActions">
+      <a href="auth.html?tab=login" class="btn btn-ghost btn-sm">Log In</a>
+      <a href="auth.html?tab=signup" class="btn btn-primary btn-sm">Sign Up Free</a>
+    </div>
+    <button class="nav-hamburger" id="hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile Nav -->
+<div class="nav-mobile" id="mobileNav">
+  <a href="index.html">Home</a>
+  <a href="pricing.html">Pricing</a>
+  <div class="nav-mobile-actions" id="navMobileActions">
+    <a href="auth.html?tab=login" class="btn btn-outline btn-sm" style="flex:1;">Log In</a>
+    <a href="auth.html?tab=signup" class="btn btn-primary btn-sm" style="flex:1;">Sign Up</a>
+  </div>
+</div>
+
+<div class="page-wrapper">
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-eyebrow">
+      <i class="fa-solid fa-wand-magic-sparkles"></i>
+      AI-Powered Ad Design Templates
+    </div>
+    <h1>Create Stunning Ads<br>with <span class="gradient-text">AI Prompts</span></h1>
+    <p>Browse hundreds of professional ad design styles. Click any style to get a ready-to-use AI prompt — paste it into Midjourney, DALL-E, or any AI model with your reference image.</p>
+    <div class="hero-actions">
+      <a href="#categories" class="btn btn-primary btn-lg">
+        <i class="fa-solid fa-grid-2"></i> Browse Categories
+      </a>
+      <a href="pricing.html" class="btn btn-outline btn-lg">
+        <i class="fa-solid fa-crown"></i> View Plans
+      </a>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <span class="num" id="statStyles">500+</span>
+        <span class="label">Ad Styles</span>
+      </div>
+      <div class="hero-stat">
+        <span class="num" id="statCategories">12</span>
+        <span class="label">Categories</span>
+      </div>
+      <div class="hero-stat">
+        <span class="num">Any AI</span>
+        <span class="label">Model Compatible</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="section" style="border-top:1px solid var(--border);">
+    <div class="section-header">
+      <h2>How It Works</h2>
+      <div class="section-divider"></div>
+      <p>Three simple steps to your perfect AI-generated ad</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.5rem;max-width:800px;margin:0 auto;">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem;text-align:center;">
+        <div style="width:52px;height:52px;background:rgba(37,99,235,0.12);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;font-size:1.5rem;">🔍</div>
+        <h3 style="color:var(--white);font-size:1rem;font-weight:700;margin-bottom:0.5rem;">1. Browse</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">Choose your business category and explore hundreds of ad style examples.</p>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem;text-align:center;">
+        <div style="width:52px;height:52px;background:rgba(37,99,235,0.12);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;font-size:1.5rem;">📋</div>
+        <h3 style="color:var(--white);font-size:1rem;font-weight:700;margin-bottom:0.5rem;">2. Copy Prompt</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">Click any style to get the complete AI meta-prompt, ready to copy instantly.</p>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem;text-align:center;">
+        <div style="width:52px;height:52px;background:rgba(37,99,235,0.12);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;font-size:1.5rem;">✨</div>
+        <h3 style="color:var(--white);font-size:1rem;font-weight:700;margin-bottom:0.5rem;">3. Generate</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">Paste into Midjourney, DALL-E, or Stable Diffusion with your product photo.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Categories -->
+  <section class="section" id="categories">
+    <div class="section-header">
+      <h2>Browse by Category</h2>
+      <div class="section-divider"></div>
+      <p>Select a category to explore ad design styles for your business</p>
+    </div>
+    <div class="categories-grid" id="categoriesGrid">
+      <!-- Skeleton placeholders -->
+      <div class="skeleton-card" style="border-radius:var(--radius-lg);padding:2rem 1.25rem;">
+        <div class="skeleton" style="width:48px;height:48px;border-radius:50%;margin:0 auto 0.75rem;"></div>
+        <div class="skeleton skeleton-line" style="margin:0 auto;width:70%;"></div>
+        <div class="skeleton skeleton-line short" style="margin:0.4rem auto 0;"></div>
+      </div>
+      <div class="skeleton-card" style="border-radius:var(--radius-lg);padding:2rem 1.25rem;">
+        <div class="skeleton" style="width:48px;height:48px;border-radius:50%;margin:0 auto 0.75rem;"></div>
+        <div class="skeleton skeleton-line" style="margin:0 auto;width:70%;"></div>
+        <div class="skeleton skeleton-line short" style="margin:0.4rem auto 0;"></div>
+      </div>
+      <div class="skeleton-card" style="border-radius:var(--radius-lg);padding:2rem 1.25rem;">
+        <div class="skeleton" style="width:48px;height:48px;border-radius:50%;margin:0 auto 0.75rem;"></div>
+        <div class="skeleton skeleton-line" style="margin:0 auto;width:70%;"></div>
+        <div class="skeleton skeleton-line short" style="margin:0.4rem auto 0;"></div>
+      </div>
+      <div class="skeleton-card" style="border-radius:var(--radius-lg);padding:2rem 1.25rem;">
+        <div class="skeleton" style="width:48px;height:48px;border-radius:50%;margin:0 auto 0.75rem;"></div>
+        <div class="skeleton skeleton-line" style="margin:0 auto;width:70%;"></div>
+        <div class="skeleton skeleton-line short" style="margin:0.4rem auto 0;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Upgrade CTA -->
+  <section class="section" id="upgradeSection" style="display:none;">
+    <div class="upgrade-banner">
+      <i class="fa-solid fa-crown" style="font-size:2.5rem;color:#f59e0b;margin-bottom:1rem;display:block;"></i>
+      <h3>Unlock All 500+ Ad Prompts</h3>
+      <p>Upgrade to Premium and get full access to every prompt, unlimited copies, and new styles added weekly.</p>
+      <a href="pricing.html" class="btn btn-primary btn-lg">
+        <i class="fa-solid fa-crown"></i> Upgrade to Premium
+      </a>
+    </div>
+  </section>
+
+</div>
+
+<!-- Footer -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">
+      <div class="logo-icon">🎨</div>
+      Abdalla Eissa for Design
+    </div>
+    <div class="footer-links">
+      <a href="index.html">Home</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="auth.html?tab=login">Login</a>
+      <a href="auth.html?tab=signup">Sign Up</a>
+    </div>
+    <p class="footer-copy">&copy; 2024 Abdalla Eissa for Design. All rights reserved.</p>
+  </div>
+</footer>
+
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/home.js"></script>
+</body>
+</html>

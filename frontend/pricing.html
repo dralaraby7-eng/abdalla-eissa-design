@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pricing | Abdalla Eissa for Design</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo">
+      <div class="logo-icon">🎨</div>
+      <span>Abdalla Eissa <span class="accent">for Design</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="pricing.html" class="active">Pricing</a>
+    </div>
+    <div class="nav-actions" id="navActions">
+      <a href="auth.html?tab=login" class="btn btn-ghost btn-sm">Log In</a>
+      <a href="auth.html?tab=signup" class="btn btn-primary btn-sm">Sign Up Free</a>
+    </div>
+    <button class="nav-hamburger" id="hamburger"><span></span><span></span><span></span></button>
+  </div>
+</nav>
+<div class="nav-mobile" id="mobileNav">
+  <a href="index.html">Home</a>
+  <a href="pricing.html">Pricing</a>
+  <div class="nav-mobile-actions" id="navMobileActions"></div>
+</div>
+
+<div class="page-wrapper">
+  <section class="hero" style="padding:4rem 2rem 3rem;">
+    <div class="hero-eyebrow"><i class="fa-solid fa-crown"></i> Simple Pricing</div>
+    <h1>Choose Your <span class="gradient-text">Plan</span></h1>
+    <p>Start free, upgrade when you need full access to all AI ad prompts.</p>
+  </section>
+
+  <section class="section">
+    <div class="pricing-grid">
+
+      <!-- Free Plan -->
+      <div class="pricing-card">
+        <div class="pricing-name">Free</div>
+        <div class="pricing-price">
+          <span class="amount">0</span>
+          <span class="currency">EGP</span>
+          <span class="period">/ forever</span>
+        </div>
+        <p class="pricing-desc">Get started with no credit card required.</p>
+        <div class="pricing-features">
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Browse all categories</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> View all style images</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Preview first 140 chars of any prompt</div>
+          <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> Copy full prompts</div>
+          <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> Access premium styles</div>
+          <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> New styles weekly</div>
+        </div>
+        <a href="auth.html?tab=signup" class="btn btn-outline" style="width:100%;justify-content:center;padding:0.75rem;">
+          Get Started Free
+        </a>
+      </div>
+
+      <!-- Premium Plan -->
+      <div class="pricing-card featured">
+        <div class="pricing-badge"><i class="fa-solid fa-crown"></i> Most Popular</div>
+        <div class="pricing-name">Premium</div>
+
+        <!-- Billing toggle -->
+        <div style="margin-bottom:1.25rem;">
+          <div style="display:flex;gap:0.5rem;background:var(--bg-base);border-radius:var(--radius-md);padding:3px;margin-bottom:0.75rem;">
+            <button onclick="setBilling('monthly')" id="btnMonthly" class="auth-tab active" style="flex:1;font-size:0.8rem;">Monthly</button>
+            <button onclick="setBilling('yearly')" id="btnYearly" class="auth-tab" style="flex:1;font-size:0.8rem;">Yearly <span style="color:#34d399;font-size:0.7rem;">-25%</span></button>
+          </div>
+          <div class="pricing-price">
+            <span class="amount" id="priceAmount">199</span>
+            <span class="currency">EGP</span>
+            <span class="period" id="pricePeriod">/ month</span>
+          </div>
+          <p id="priceSub" class="pricing-desc">Billed monthly. Cancel anytime.</p>
+        </div>
+
+        <div class="pricing-features">
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Everything in Free</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Copy full AI prompts</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> All 500+ ad styles</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Access all premium styles</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> New styles added weekly</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Priority support</div>
+        </div>
+
+        <button onclick="handleUpgrade()" class="btn btn-primary" style="width:100%;justify-content:center;padding:0.75rem;" id="upgradeBtn">
+          <i class="fa-solid fa-crown"></i> <span id="upgradeBtnText">Get Premium</span>
+        </button>
+        <p style="font-size:0.75rem;color:var(--text-muted);text-align:center;margin-top:0.6rem;">Secure payment via Paymob</p>
+      </div>
+
+    </div>
+
+    <!-- FAQ -->
+    <div style="max-width:640px;margin:4rem auto 0;">
+      <h2 style="text-align:center;font-size:1.4rem;color:var(--white);margin-bottom:2rem;">Frequently Asked Questions</h2>
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;">
+          <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">What AI tools can I use these prompts with?</h3>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">Any! Midjourney, DALL-E 3, Stable Diffusion, Adobe Firefly, Google ImageFX, and more. The prompts are written to work universally.</p>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;">
+          <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">Can I cancel my subscription anytime?</h3>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">Yes. You can cancel at any time from your dashboard. You'll keep premium access until the end of your billing period.</p>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;">
+          <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">Do the prompts include my reference image?</h3>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">The prompt is text-only — you provide your own reference/product image when generating. The prompt tells the AI the style, mood, lighting, and layout to apply to your image.</p>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;">
+          <h3 style="font-size:0.95rem;font-weight:600;color:var(--white);margin-bottom:0.5rem;">Is payment secure?</h3>
+          <p style="font-size:0.85rem;color:var(--text-secondary);">Yes. All payments are processed securely through Paymob, Egypt's leading payment gateway. We never store your card details.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo"><div class="logo-icon">🎨</div> Abdalla Eissa for Design</div>
+    <div class="footer-links"><a href="index.html">Home</a><a href="pricing.html">Pricing</a><a href="auth.html?tab=login">Login</a></div>
+    <p class="footer-copy">&copy; 2024 Abdalla Eissa for Design.</p>
+  </div>
+</footer>
+
+<div id="toastContainer" class="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+  let billingCycle = 'monthly';
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    await initAuth();
+    document.getElementById('hamburger')?.addEventListener('click', () =>
+      document.getElementById('mobileNav')?.classList.toggle('open'));
+  });
+
+  function setBilling(cycle) {
+    billingCycle = cycle;
+    document.getElementById('btnMonthly').classList.toggle('active', cycle === 'monthly');
+    document.getElementById('btnYearly').classList.toggle('active', cycle === 'yearly');
+    document.getElementById('priceAmount').textContent = cycle === 'yearly' ? '149' : '199';
+    document.getElementById('pricePeriod').textContent = cycle === 'yearly' ? '/ month' : '/ month';
+    document.getElementById('priceSub').textContent = cycle === 'yearly'
+      ? 'Billed 1,788 EGP yearly. Save 25%.'
+      : 'Billed monthly. Cancel anytime.';
+    document.getElementById('upgradeBtnText').textContent = cycle === 'yearly' ? 'Get Premium (Yearly)' : 'Get Premium';
+  }
+
+  async function handleUpgrade() {
+    if (!currentUser) {
+      window.location.href = 'auth.html?tab=signup&back=' + encodeURIComponent(window.location.href);
+      return;
+    }
+    if (isPremium()) {
+      showToast('You already have Premium!', 'success');
+      return;
+    }
+    const btn = document.getElementById('upgradeBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Redirecting to payment…';
+
+    try {
+      const res = await fetch(`${API_URL}/api/payments/create-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: currentUser.id,
+          email: currentUser.email,
+          billing: billingCycle
+        })
+      });
+      const data = await res.json();
+      if (data.payment_url) {
+        window.location.href = data.payment_url;
+      } else {
+        throw new Error(data.detail || 'Payment initiation failed');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-crown"></i> <span id="upgradeBtnText">Get Premium</span>';
+    }
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login / Sign Up | Abdalla Eissa for Design</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+<div class="auth-page">
+  <div class="auth-card">
+
+    <!-- Logo -->
+    <div class="auth-logo">
+      <div class="logo-icon">🎨</div>
+      <h1>Abdalla Eissa for Design</h1>
+      <p>AI-Powered Ad Design Templates</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="auth-tabs">
+      <button class="auth-tab" id="tabLogin" onclick="showTab('login')">Log In</button>
+      <button class="auth-tab" id="tabSignup" onclick="showTab('signup')">Sign Up</button>
+    </div>
+
+    <!-- Alerts -->
+    <div class="alert alert-error" id="authAlert">
+      <i class="fa-solid fa-circle-xmark"></i>
+      <span id="authAlertMsg"></span>
+    </div>
+    <div class="alert alert-info" id="authEmailAlert" style="flex-direction:column;align-items:flex-start;gap:0.75rem;">
+      <div style="display:flex;gap:0.5rem;align-items:center;">
+        <i class="fa-solid fa-envelope-circle-check"></i>
+        <strong>Email not confirmed yet</strong>
+      </div>
+      <p style="font-size:0.8rem;margin:0;">Check your inbox for the confirmation link. Can't find it?</p>
+      <button id="resendBtn" onclick="resendConfirmation()" class="btn btn-outline btn-sm" style="border-color:var(--blue-400);color:var(--blue-300);">
+        <i class="fa-solid fa-rotate-right"></i> Resend confirmation email
+      </button>
+    </div>
+    <div class="alert alert-success" id="authSuccess">
+      <i class="fa-solid fa-circle-check"></i>
+      <div>
+        <span id="authSuccessMsg"></span>
+        <div id="authSuccessExtra" style="font-size:0.78rem;color:var(--blue-300);margin-top:0.3rem;display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Login Form -->
+    <form id="loginForm" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <div class="form-input-icon">
+          <i class="fa-regular fa-envelope"></i>
+          <input type="email" class="form-input" id="loginEmail" placeholder="you@example.com" required autocomplete="email">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <div class="form-input-icon">
+          <i class="fa-solid fa-lock"></i>
+          <input type="password" class="form-input" id="loginPassword" placeholder="Your password" required autocomplete="current-password">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:0.75rem;" id="loginBtn">
+        <span id="loginBtnText"><i class="fa-solid fa-right-to-bracket"></i> Log In</span>
+        <span id="loginSpinner" class="spinner" style="display:none;"></span>
+      </button>
+    </form>
+
+    <!-- Signup Form -->
+    <form id="signupForm" onsubmit="handleSignup(event)" style="display:none;">
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <div class="form-input-icon">
+          <i class="fa-regular fa-user"></i>
+          <input type="text" class="form-input" id="signupName" placeholder="Your full name" required autocomplete="name">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <div class="form-input-icon">
+          <i class="fa-regular fa-envelope"></i>
+          <input type="email" class="form-input" id="signupEmail" placeholder="you@example.com" required autocomplete="email">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <div class="form-input-icon">
+          <i class="fa-solid fa-lock"></i>
+          <input type="password" class="form-input" id="signupPassword" placeholder="Minimum 8 characters" required minlength="8" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password</label>
+        <div class="form-input-icon">
+          <i class="fa-solid fa-lock"></i>
+          <input type="password" class="form-input" id="signupConfirm" placeholder="Repeat password" required autocomplete="new-password">
+        </div>
+        <div class="form-error" id="confirmError">Passwords do not match.</div>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:0.75rem;" id="signupBtn">
+        <span id="signupBtnText"><i class="fa-solid fa-user-plus"></i> Create Free Account</span>
+        <span id="signupSpinner" class="spinner" style="display:none;"></span>
+      </button>
+    </form>
+
+    <div class="auth-footer">
+      <span id="footerLoginText">Don't have an account? <a href="#" onclick="showTab('signup');return false;">Sign up free</a></span>
+      <span id="footerSignupText" style="display:none;">Already have an account? <a href="#" onclick="showTab('login');return false;">Log in</a></span>
+    </div>
+  </div>
+</div>
+
+<div id="toastContainer" class="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+  const backUrl = getParam('back') || 'index.html';
+  let lastLoginEmail = '';
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) { window.location.href = backUrl; return; }
+    showTab(getParam('tab') || 'login');
+  });
+
+  function showTab(tab) {
+    const isLogin = tab === 'login';
+    document.getElementById('loginForm').style.display = isLogin ? '' : 'none';
+    document.getElementById('signupForm').style.display = isLogin ? 'none' : '';
+    document.getElementById('footerLoginText').style.display = isLogin ? '' : 'none';
+    document.getElementById('footerSignupText').style.display = isLogin ? 'none' : '';
+    document.getElementById('tabLogin').classList.toggle('active', isLogin);
+    document.getElementById('tabSignup').classList.toggle('active', !isLogin);
+    hideAlerts();
+  }
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    hideAlerts();
+    const email = document.getElementById('loginEmail').value.trim();
+    lastLoginEmail = email;
+    setLoading('login', true);
+    try {
+      await signIn(email, document.getElementById('loginPassword').value);
+      window.location.href = backUrl;
+    } catch (err) {
+      const msg = (err.message || '').toLowerCase();
+      if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
+        showEmailNotConfirmed();
+      } else if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('wrong password')) {
+        showError('Email or password is incorrect.');
+      } else if (msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed')) {
+        showError('Network error. Check your internet connection and try again.');
+      } else {
+        showError(err.message || 'Login failed. Please try again.');
+      }
+    } finally {
+      setLoading('login', false);
+    }
+  }
+
+  async function handleSignup(e) {
+    e.preventDefault();
+    hideAlerts();
+    const pass = document.getElementById('signupPassword').value;
+    const confirm = document.getElementById('signupConfirm').value;
+    if (pass !== confirm) {
+      document.getElementById('confirmError').classList.add('visible');
+      return;
+    }
+    document.getElementById('confirmError').classList.remove('visible');
+    const email = document.getElementById('signupEmail').value.trim();
+    lastLoginEmail = email;
+    setLoading('signup', true);
+    try {
+      const result = await signUp(email, pass, document.getElementById('signupName').value.trim());
+      // Check if email confirmation is required
+      const needsConfirm = !result?.session;
+      if (needsConfirm) {
+        showSuccess(
+          'Account created! 🎉',
+          `We sent a confirmation link to ${email}. Click it to activate your account, then come back to log in.`
+        );
+      } else {
+        // Email confirmation disabled — auto-logged-in
+        window.location.href = backUrl;
+      }
+    } catch (err) {
+      const msg = (err.message || '').toLowerCase();
+      if (msg.includes('already registered') || msg.includes('user already')) {
+        showError('This email is already registered. Try logging in instead.');
+      } else if (msg.includes('failed to fetch') || msg.includes('networkerror')) {
+        showError('Network error. Check your internet connection and try again.');
+      } else {
+        showError(err.message || 'Sign up failed. Please try again.');
+      }
+    } finally {
+      setLoading('signup', false);
+    }
+  }
+
+  async function resendConfirmation() {
+    const btn = document.getElementById('resendBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Sending…';
+    try {
+      const { error } = await sb.auth.resend({ type: 'signup', email: lastLoginEmail });
+      if (error) throw error;
+      showToast('Confirmation email sent! Check your inbox.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Could not resend email. Try again.', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> Resend confirmation email';
+    }
+  }
+
+  function setLoading(form, loading) {
+    const btn  = document.getElementById(`${form}Btn`);
+    const txt  = document.getElementById(`${form}BtnText`);
+    const spin = document.getElementById(`${form}Spinner`);
+    btn.disabled = loading;
+    txt.style.display  = loading ? 'none' : '';
+    spin.style.display = loading ? 'inline-block' : 'none';
+  }
+
+  function showError(msg) {
+    document.getElementById('authAlertMsg').textContent = msg;
+    document.getElementById('authAlert').classList.add('visible');
+  }
+
+  function showEmailNotConfirmed() {
+    document.getElementById('authEmailAlert').classList.add('visible');
+  }
+
+  function showSuccess(msg, extra) {
+    document.getElementById('authSuccessMsg').textContent = msg;
+    const extraEl = document.getElementById('authSuccessExtra');
+    if (extra) { extraEl.textContent = extra; extraEl.style.display = ''; }
+    document.getElementById('authSuccess').classList.add('visible');
+  }
+
+  function hideAlerts() {
+    ['authAlert', 'authEmailAlert', 'authSuccess'].forEach(id =>
+      document.getElementById(id).classList.remove('visible')
+    );
+  }
+</script>
+</body>
+</html>

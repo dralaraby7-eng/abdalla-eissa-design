@@ -1,0 +1,47 @@
+# ── Environment & Secrets ──────────────────────────────────
+.env
+*.env.local
+*.env.production
+!.env.example
+
+# ── Python ─────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# ── Node (if added later) ──────────────────────────────────
+node_modules/
+.npm
+.yarn
+
+# ── OS ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+
+# ── IDE ────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.sublime-workspace
+
+# ── Logs ───────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Original WhatsApp images (already in Supabase Storage) ─
+images/
+
+# ── Temp scripts ───────────────────────────────────────────
+run_sql.py
