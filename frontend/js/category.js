@@ -52,7 +52,7 @@ async function loadCategory(slug) {
 
   const { data: styles, error: stylesErr } = await sb
     .from('ad_styles')
-    .select('id, title, image_url, tags, is_premium, description, view_count, created_at')
+    .select('id, title, image_url, tags, is_premium, description, view_count, created_at, meta_prompt')
     .eq('category_id', cat.id)
     .order('created_at', { ascending: false });
 
@@ -127,27 +127,16 @@ function renderStyles() {
 
 // ── Style Viewer Modal ────────────────────────────────────────
 
-async function svOpen(id) {
+function svOpen(id) {
   const overlay = document.getElementById('svOverlay');
   const inner = document.getElementById('svInner');
 
-  inner.innerHTML = '<div class="loading-overlay"><div class="spinner"></div></div>';
+  // Read from already-loaded data — no second fetch, no spinner, instant
+  const style = allStyles.find(s => s.id === id);
+  if (!style) return;
+
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
-
-  const { data: style, error } = await sb
-    .from('ad_styles')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (error || !style) {
-    inner.innerHTML = `<div class="empty-state" style="padding:4rem;grid-column:1/-1;">
-      <i class="fa-solid fa-triangle-exclamation"></i>
-      <h3>Could not load style</h3>
-    </div>`;
-    return;
-  }
 
   sb.rpc('increment_view_count', { style_id: id }).catch(() => {});
 
