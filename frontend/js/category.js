@@ -130,23 +130,35 @@ function renderStyles() {
 function svOpen(id) {
   const overlay = document.getElementById('svOverlay');
   const inner = document.getElementById('svInner');
+  if (!overlay || !inner) return;
 
-  // Read from already-loaded data — no second fetch, no spinner, instant
   const style = allStyles.find(s => s.id === id);
-  if (!style) return;
-
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
 
-  sb.rpc('increment_view_count', { style_id: id }).catch(() => {});
+  if (!style) {
+    inner.innerHTML = `<div style="padding:3rem;text-align:center;color:var(--text-muted);">
+      <i class="fa-solid fa-triangle-exclamation" style="font-size:2rem;color:#f59e0b;"></i>
+      <p style="margin-top:1rem;">Style not found. Try refreshing the page.</p>
+    </div>`;
+    return;
+  }
 
-  const userCan = isPremium() || isAdmin() || !style.is_premium;
+  try {
+    sb.rpc('increment_view_count', { style_id: id }).catch(() => {});
+  } catch (e) { /* ignore */ }
+
+  const userCan = (typeof isPremium === 'function' && isPremium())
+                || (typeof isAdmin === 'function' && isAdmin())
+                || !style.is_premium;
   const promptText = style.meta_prompt || '';
   const preview = promptText.slice(0, FREE_PREVIEW_CHARS);
   const hasMore = promptText.length > FREE_PREVIEW_CHARS;
   const seed = id.slice(0, 8);
+  const loggedIn = typeof currentUser !== 'undefined' && currentUser;
 
-  inner.innerHTML = `
+  try {
+    inner.innerHTML = `
     <div class="sv-image-col">
       <img
         src="${escapeHtml(style.image_url)}"
@@ -185,7 +197,7 @@ function svOpen(id) {
                <a href="pricing.html" class="btn btn-primary">
                  <i class="fa-solid fa-crown"></i> Unlock with Premium
                </a>
-               ${!currentUser
+               ${!loggedIn
                  ? `<a href="auth.html?tab=signup&back=${encodeURIComponent(window.location.href)}" class="btn btn-outline btn-sm">Sign up free to preview</a>`
                  : ''
                }
@@ -210,6 +222,13 @@ function svOpen(id) {
       </details>
     </div>
   `;
+  } catch (err) {
+    console.error('svOpen render error:', err);
+    inner.innerHTML = `<div style="padding:3rem;text-align:center;color:var(--text-muted);">
+      <i class="fa-solid fa-triangle-exclamation" style="font-size:2rem;color:#ef4444;"></i>
+      <p style="margin-top:1rem;">Could not render this style.<br><small>${escapeHtml(String(err.message || err))}</small></p>
+    </div>`;
+  }
 }
 
 function svCopyPrompt() {
