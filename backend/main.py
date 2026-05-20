@@ -14,11 +14,16 @@ load_dotenv()
 # Supabase service-role client (admin access, bypasses RLS)
 SUPABASE_URL         = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+    raise RuntimeError(
+        "Missing SUPABASE_URL or SUPABASE_SERVICE_KEY. "
+        "Set them in Render → Environment (or local .env). See backend/.env.example."
+    )
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-# Allowed origins (comma-separated in .env)
+# Allowed origins (comma-separated in env)
 _origins_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:5500")
-allowed_origins = [o.strip() for o in _origins_raw.split(",")]
+allowed_origins = [o.strip() for o in _origins_raw.split(",") if o.strip()]
 
 app = FastAPI(
     title="Abdalla Eissa for Design API",

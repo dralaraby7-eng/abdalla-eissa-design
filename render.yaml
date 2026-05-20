@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: abdalla-eissa-design
+    runtime: python
+    region: frankfurt
+    plan: free
+    branch: master
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: PAYMOB_API_KEY
+        sync: false
+      - key: PAYMOB_INTEGRATION_ID
+        sync: false
+      - key: PAYMOB_IFRAME_ID
+        sync: false
+      - key: PAYMOB_HMAC_SECRET
+        sync: false
+      - key: PRICE_LIFETIME_EGP_CENTS
+        value: "25000"
+      - key: FRONTEND_URL
+        value: https://abdalla-eissa-design.vercel.app
+      - key: ALLOWED_ORIGINS
+        value: https://abdalla-eissa-design.vercel.app
