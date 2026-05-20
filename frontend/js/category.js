@@ -180,17 +180,13 @@ async function svOpen(id) {
         ${style.is_premium ? '<span style="color:#f59e0b;"><i class="fa-solid fa-crown"></i> Premium</span>' : ''}
       </div>
 
-      ${style.description
-        ? `<p class="sv-desc">${escapeHtml(style.description)}</p>`
-        : ''}
-
       <div class="prompt-block">
         <div class="prompt-block-label"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Meta Prompt</div>
 
         ${userCan
           ? promptText
             ? `<div class="prompt-text" id="svPromptText">${escapeHtml(promptText)}</div>
-               <button class="btn btn-primary btn-sm prompt-copy-btn" onclick="svCopyPrompt()">
+               <button class="btn btn-primary prompt-copy-btn" onclick="svCopyPrompt()">
                  <i class="fa-regular fa-copy"></i> Copy Prompt
                </button>`
             : `<div style="color:var(--text-muted);font-size:0.85rem;padding:1rem 0;">No prompt added yet for this style.</div>`
@@ -208,16 +204,21 @@ async function svOpen(id) {
         }
       </div>
 
-      <div class="how-to-use">
-        <h3><i class="fa-solid fa-circle-info"></i> How to use this prompt</h3>
-        <ol>
-          <li>Copy the prompt using the <strong>Copy Prompt</strong> button above.</li>
-          <li>Open your AI image tool (Midjourney, DALL-E, Stable Diffusion, etc.).</li>
-          <li>Paste the prompt and <strong>attach your product or reference image</strong>.</li>
+      ${style.description
+        ? `<p class="sv-desc" style="margin-top:0.5rem;">${escapeHtml(style.description)}</p>`
+        : ''}
+
+      <details style="margin-top:1rem;">
+        <summary style="cursor:pointer;font-size:0.82rem;color:var(--text-muted);list-style:none;display:flex;align-items:center;gap:0.4rem;">
+          <i class="fa-solid fa-circle-info"></i> How to use this prompt
+        </summary>
+        <ol style="font-size:0.82rem;color:var(--text-secondary);line-height:1.7;margin-top:0.75rem;padding-left:1.2rem;">
+          <li>Copy the prompt above, then open Midjourney, DALL-E, Stable Diffusion, etc.</li>
+          <li>Paste the prompt and attach your product or reference image.</li>
           <li>Replace every <code style="color:var(--blue-300);">[PLACEHOLDER]</code> with your actual details.</li>
           <li>Generate and download your ad image.</li>
         </ol>
-      </div>
+      </details>
     </div>
   `;
 }

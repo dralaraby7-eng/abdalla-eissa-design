@@ -663,11 +663,9 @@ input, textarea, select { font-family: inherit; outline: none; border: none; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem 1.1rem;
-  max-height: 340px;
-  overflow-y: auto;
   font-family: inherit;
   margin-bottom: 0.85rem;
-  scroll-behavior: smooth;
+  display: block;
 }
 .prompt-text.blurred {
   filter: blur(4px);
@@ -1403,11 +1401,8 @@ textarea.form-input { resize: vertical; min-height: 120px; }
   border-radius: var(--radius-xl);
   width: 100%;
   max-width: 980px;
-  height: 88vh;
-  max-height: 88vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  max-height: 90vh;
+  overflow-y: auto;
   position: relative;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), var(--glow);
   transform: translateY(16px) scale(0.97);
@@ -1440,18 +1435,17 @@ textarea.form-input { resize: vertical; min-height: 120px; }
 }
 .sv-inner {
   display: grid;
-  grid-template-columns: 360px 1fr;
-  flex: 1;
-  overflow: hidden;
-  min-height: 0;
+  grid-template-columns: 320px 1fr;
 }
 .sv-image-col {
-  padding: 2rem;
+  padding: 1.5rem;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  overflow-y: auto;
+  gap: 0.75rem;
+  position: sticky;
+  top: 0;
+  height: fit-content;
 }
 .sv-image-col img {
   width: 100%;
@@ -1467,9 +1461,7 @@ textarea.form-input { resize: vertical; min-height: 120px; }
   gap: 0.4rem;
 }
 .sv-content-col {
-  padding: 2rem;
-  overflow-y: auto;
-  min-height: 0;
+  padding: 1.5rem 2rem 2rem;
 }
 .sv-title {
   font-size: 1.35rem;
@@ -1501,7 +1493,7 @@ textarea.form-input { resize: vertical; min-height: 120px; }
   .prompt-image-wrap { position: static; }
   .dashboard-layout { grid-template-columns: 1fr; }
   .dashboard-sidebar { display: none; }
-  .sv-inner { grid-template-columns: 320px 1fr; }
+  .sv-inner { grid-template-columns: 280px 1fr; }
 }
 @media (max-width: 768px) {
   .navbar { padding: 0 1rem; }
@@ -1519,15 +1511,15 @@ textarea.form-input { resize: vertical; min-height: 120px; }
   .dashboard-content { padding: 1.5rem; }
   .pricing-grid { grid-template-columns: 1fr; }
   /* Style viewer modal — stack on mobile */
-  .sv-modal { height: 92vh; max-height: 92vh; flex-direction: column; overflow-y: auto; }
-  .sv-inner { grid-template-columns: 1fr; overflow: visible; flex: none; }
+  .sv-inner { grid-template-columns: 1fr; }
   .sv-image-col {
     border-right: none;
     border-bottom: 1px solid var(--border);
-    padding: 1.5rem 1.5rem 1rem;
-    overflow-y: visible;
+    padding: 1.25rem 1.5rem 1rem;
+    position: static;
+    height: auto;
   }
-  .sv-content-col { padding: 1.25rem 1.5rem 1.5rem; min-height: auto; overflow-y: visible; }
+  .sv-content-col { padding: 1.25rem 1.5rem 1.5rem; }
   .sv-title { font-size: 1.1rem; }
 }
 @media (max-width: 480px) {
