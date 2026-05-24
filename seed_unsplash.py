@@ -57,6 +57,7 @@ UNSPLASH_KEY   = os.getenv("UNSPLASH_ACCESS_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 UNSPLASH_BASE = "https://api.unsplash.com"
+GEMINI_MODEL  = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_SLEEP  = 4.5   # 15 RPM safe rate
 
 SEARCH_MODIFIERS = {
@@ -160,7 +161,7 @@ def gen_meta_prompt(category_name: str, photo: dict) -> str:
     mime = img_resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
 
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel(GEMINI_MODEL)
 
     photo_desc = photo.get("description") or photo.get("alt_description") or "(none)"
     sys_prompt = f"""You are an expert advertising prompt engineer for AI image generation

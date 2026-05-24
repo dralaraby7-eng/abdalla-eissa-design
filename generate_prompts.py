@@ -71,7 +71,7 @@ def generate_meta_prompt(title: str, category_name: str, description: str,
     import google.generativeai as genai
 
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
 
     tags_str = ", ".join(tags) if tags else "none"
 
