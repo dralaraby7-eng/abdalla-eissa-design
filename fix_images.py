@@ -1,19 +1,35 @@
 """
 fix_images.py — Verify and fix Supabase Storage image URLs
-Run: python fix_images.py
+
+Run:
+  set SUPABASE_SERVICE_KEY=...        (or put it in .env at repo root)
+  python fix_images.py
 """
+import os
+import sys
+from pathlib import Path
 from supabase import create_client
 
-SUPABASE_URL = "https://ukjwbcrbnutxemwsebsc.supabase.co"
-SERVICE_KEY  = (
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-    "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrandiY3JibnV0eGVtd3NlYnNjIiwi"
-    "***SERVICE_ROLE_PAYLOAD_REMOVED***"
-    "***SERVICE_ROLE_SIG_REMOVED***"
-)
-BUCKET = "style-images"
+# Load .env from repo root if python-dotenv is installed
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+    load_dotenv(Path(__file__).parent / "backend" / ".env")
+except ImportError:
+    pass
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://ukjwbcrbnutxemwsebsc.supabase.co")
+SERVICE_KEY  = os.getenv("SUPABASE_SERVICE_KEY", "")
+BUCKET       = os.getenv("SUPABASE_BUCKET", "style-images")
+
+if not SERVICE_KEY:
+    sys.exit(
+        "ERROR: SUPABASE_SERVICE_KEY is not set.\n"
+        "Set it via env var or .env file. NEVER hardcode it in this file."
+    )
 
 sb = create_client(SUPABASE_URL, SERVICE_KEY)
+
 
 def main():
     print("\n🔧 Fixing Supabase Storage image URLs\n" + "─" * 45)
@@ -36,7 +52,6 @@ def main():
                 print(f"    - pastry/{f['name']}")
         else:
             print("  ⚠️  No files found in pastry/ folder")
-            print("  → Run upload_styles.py first to upload images")
     except Exception as e:
         print(f"  ❌ Error listing files: {e}")
         files = []
@@ -50,11 +65,8 @@ def main():
     fixed = 0
     for style in styles:
         url = style["image_url"]
-        # Get the public URL via SDK for any storage URL
-        # Extract storage path from existing URL if it's a storage URL
         if "/storage/v1/object/public/" in url:
             path = url.split(f"/storage/v1/object/public/{BUCKET}/")[-1]
-            # Re-construct URL using SDK method
             try:
                 public_url = sb.storage.from_(BUCKET).get_public_url(path)
                 if public_url != url:
@@ -69,20 +81,9 @@ def main():
             print(f"  ℹ️  Non-storage URL (external): {style['title']}")
 
     print(f"\n  Fixed {fixed} URLs")
-
-    # Step 4: Print sample URL to test manually
-    print("\n[4] Sample URLs to test in browser:")
-    if files:
-        for f in files[:3]:
-            path = f"pastry/{f['name']}"
-            url = sb.storage.from_(BUCKET).get_public_url(path)
-            print(f"  {url}")
-
     print("\n" + "─" * 45)
     print("Done!\n")
-    print("If images still don't appear, go to:")
-    print("Supabase Dashboard → Storage → style-images bucket")
-    print("→ Click the three dots (⋮) → Edit bucket → Enable 'Public bucket' → Save\n")
+
 
 if __name__ == "__main__":
     main()
