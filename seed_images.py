@@ -1,39 +1,54 @@
 """
-seed_images.py — Seed N high-quality images per category from Pexels or
-Unsplash, generate meta_prompts via Gemini, and insert into the Supabase
+seed_images.py — Seed N high-quality images per category from Pexels,
+Unsplash, or Pixabay, generate meta_prompts via Gemini (direct API) or
+OpenRouter (cheapest vision model), and insert into the Supabase
 ad_styles table.
 
 First --free-count images per category are inserted as is_premium=false,
 the rest as is_premium=true.
 
-Why Pexels by default
-─────────────────────
-The Unsplash demo tier allows ~25–50 requests/hour. Pexels free tier gives
-200 requests/hour AND up to 80 photos per request — meaning a full 100 photo
-fetch is just 2 calls per category. Total budget for 12 categories ≈ 24
-requests, well under the limit.
+Image sources (compare)
+───────────────────────
+  pexels   — 200 req/hour, up to 80 per page.  Best default.
+  pixabay  — 100 req/MINUTE, up to 200 per page. Most generous.
+  unsplash — 25–50 req/hour on demo. Best curation but slowest.
+
+LLM options for meta_prompt
+───────────────────────────
+  gemini-direct  — calls Google AI Studio directly. Free tier: 15 RPM,
+                   ~1500 req/day on gemini-2.5-flash.
+  openrouter     — uses your OpenRouter credit. Default model is
+                   google/gemini-2.5-flash-lite (cheapest vision-capable
+                   ≈ $0.10/M input, $0.40/M output → ~$1.50 for 1200 images).
 
 Setup
 ─────
-  pip install requests supabase python-dotenv google-generativeai
+  pip install requests supabase python-dotenv google-generativeai openai
 
 Required env vars (in .env at repo root, or exported):
   SUPABASE_URL              (default: hardcoded project)
   SUPABASE_SERVICE_KEY      (required — never commit!)
-  PEXELS_API_KEY            (required for --source pexels)
-  UNSPLASH_ACCESS_KEY       (required for --source unsplash)
-  GEMINI_API_KEY            (required unless --skip-prompts)
+
+  PEXELS_API_KEY            (required if --source pexels)
+  PIXABAY_API_KEY           (required if --source pixabay)
+  UNSPLASH_ACCESS_KEY       (required if --source unsplash)
+
+  GEMINI_API_KEY            (required if --llm gemini-direct)
   GEMINI_MODEL              (optional, default gemini-2.5-flash)
+
+  OPENROUTER_API_KEY        (required if --llm openrouter)
+  OPENROUTER_MODEL          (optional, default google/gemini-2.5-flash-lite)
 
 Usage
 ─────
-  python seed_images.py                          # Pexels, 100/cat, 5 free
-  python seed_images.py --source unsplash        # use Unsplash instead
-  python seed_images.py --per-cat 50             # 50 per category
-  python seed_images.py --free-count 10          # 10 free per category
-  python seed_images.py --category beauty        # only one category by slug
-  python seed_images.py --skip-prompts           # insert with stub prompt
-  python seed_images.py --dry-run                # plan only, no DB writes
+  python seed_images.py                                    # pexels + gemini-direct
+  python seed_images.py --source pixabay                   # 100 RPM throughput
+  python seed_images.py --llm openrouter                   # pay-per-call via OpenRouter
+  python seed_images.py --source pixabay --llm openrouter  # max throughput
+  python seed_images.py --per-cat 50 --free-count 10
+  python seed_images.py --category beauty
+  python seed_images.py --skip-prompts                     # insert with stub prompt
+  python seed_images.py --dry-run                          # plan only, no DB writes
 """
 
 import os
@@ -56,14 +71,24 @@ except ImportError:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-SUPABASE_URL    = os.getenv("SUPABASE_URL", "https://ukjwbcrbnutxemwsebsc.supabase.co")
-SERVICE_KEY     = os.getenv("SUPABASE_SERVICE_KEY", "")
-PEXELS_KEY      = os.getenv("PEXELS_API_KEY", "")
-UNSPLASH_KEY    = os.getenv("UNSPLASH_ACCESS_KEY", "")
-GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL    = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+SUPABASE_URL       = os.getenv("SUPABASE_URL", "https://ukjwbcrbnutxemwsebsc.supabase.co")
+SERVICE_KEY        = os.getenv("SUPABASE_SERVICE_KEY", "")
 
-GEMINI_SLEEP    = 4.5   # 15 RPM safe rate
+PEXELS_KEY         = os.getenv("PEXELS_API_KEY", "")
+PIXABAY_KEY        = os.getenv("PIXABAY_API_KEY", "")
+UNSPLASH_KEY       = os.getenv("UNSPLASH_ACCESS_KEY", "")
+
+GEMINI_API_KEY     = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL       = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL   = os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash-lite")
+
+# Per-LLM throttle (seconds between calls) to stay under free-tier limits.
+LLM_SLEEP = {
+    "gemini-direct": 4.5,   # 15 RPM safe rate
+    "openrouter":    0.5,   # pay-per-call, but be gentle
+}
 
 SEARCH_MODIFIERS = {
     "food":        "food photography advertisement plated dish",
@@ -134,7 +159,7 @@ def search_pexels(query: str, count: int) -> list[dict]:
             headers=headers, timeout=20,
         )
         if r.status_code == 429:
-            sys.exit("Pexels 429: rate limit. Wait an hour or use --source unsplash.")
+            sys.exit("Pexels 429: rate limit. Wait an hour or switch --source pixabay.")
         r.raise_for_status()
         results = r.json().get("photos", [])
         if not results:
@@ -152,6 +177,50 @@ def search_pexels(query: str, count: int) -> list[dict]:
     return photos[:count]
 
 
+def search_pixabay(query: str, count: int) -> list[dict]:
+    photos, page = [], 1
+    while len(photos) < count and page <= 10:
+        per_page = min(200, count - len(photos))
+        if per_page < 3:        # Pixabay requires per_page >= 3
+            per_page = 3
+        r = requests.get(
+            "https://pixabay.com/api/",
+            params={
+                "key": PIXABAY_KEY,
+                "q": query,
+                "image_type": "photo",
+                "orientation": "all",
+                "category": "",
+                "min_width": 800,
+                "safesearch": "true",
+                "per_page": per_page,
+                "page": page,
+                "order": "popular",
+            },
+            timeout=20,
+        )
+        if r.status_code == 429:
+            sys.exit("Pixabay 429: rate limit. Wait one minute and re-run.")
+        r.raise_for_status()
+        data = r.json()
+        results = data.get("hits", [])
+        if not results:
+            break
+        for p in results:
+            tags_csv = p.get("tags", "")
+            photos.append({
+                "id":          str(p["id"]),
+                "image_url":   p.get("largeImageURL") or p.get("webformatURL"),
+                "alt":         tags_csv,
+                "description": tags_csv or None,
+                "tags":        [t.strip() for t in tags_csv.split(",") if t.strip()],
+                "_ping":       None,
+            })
+        page += 1
+        time.sleep(0.6)   # stay well under 100/min
+    return photos[:count]
+
+
 def search_unsplash(query: str, count: int) -> list[dict]:
     photos, page = [], 1
     headers = {"Authorization": f"Client-ID {UNSPLASH_KEY}"}
@@ -165,7 +234,7 @@ def search_unsplash(query: str, count: int) -> list[dict]:
         )
         if r.status_code == 403:
             sys.exit("Unsplash 403: rate limit hit or invalid key. "
-                     "Wait an hour, request production access, or use --source pexels.")
+                     "Wait an hour, request production access, or switch --source pexels.")
         r.raise_for_status()
         results = r.json().get("results", [])
         if not results:
@@ -192,21 +261,11 @@ def _safe_get(url: str, headers: dict):
         pass
 
 
-# ── Gemini ────────────────────────────────────────────────────────────────────
+# ── Prompt builder ────────────────────────────────────────────────────────────
 
-def gen_meta_prompt(category_name: str, photo: dict) -> str:
-    import google.generativeai as genai
-
-    img_resp = requests.get(photo["image_url"], timeout=25)
-    img_resp.raise_for_status()
-    img_b64 = base64.b64encode(img_resp.content).decode()
-    mime = img_resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
-
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(GEMINI_MODEL)
-
+def build_prompt_instructions(category_name: str, photo: dict) -> str:
     photo_desc = photo.get("description") or photo.get("alt") or "(none)"
-    sys_prompt = f"""You are an expert advertising prompt engineer for AI image
+    return f"""You are an expert advertising prompt engineer for AI image
 generation tools (Midjourney, DALL-E 3, Stable Diffusion, Adobe Firefly).
 
 The image belongs to the category "{category_name}".
@@ -225,9 +284,62 @@ FORMAT RULES:
 Match the prompt to the exact visual style, lighting, composition, and mood
 of the supplied image."""
 
-    image_part = {"inline_data": {"mime_type": mime, "data": img_b64}}
-    resp = model.generate_content([sys_prompt, image_part])
+
+# ── LLM adapters ─────────────────────────────────────────────────────────────
+
+def _fetch_image_bytes(url: str) -> tuple[bytes, str]:
+    r = requests.get(url, timeout=25)
+    r.raise_for_status()
+    mime = r.headers.get("Content-Type", "image/jpeg").split(";")[0]
+    return r.content, mime
+
+
+def gen_prompt_gemini_direct(category_name: str, photo: dict) -> str:
+    import google.generativeai as genai
+    img_bytes, mime = _fetch_image_bytes(photo["image_url"])
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(GEMINI_MODEL)
+    image_part = {"inline_data": {"mime_type": mime,
+                                  "data": base64.b64encode(img_bytes).decode()}}
+    resp = model.generate_content([build_prompt_instructions(category_name, photo), image_part])
     return resp.text.strip()
+
+
+def gen_prompt_openrouter(category_name: str, photo: dict) -> str:
+    """Use any OpenRouter vision-capable model via the OpenAI-compatible API."""
+    try:
+        from openai import OpenAI
+    except ImportError:
+        sys.exit("ERROR: openai package not installed. Run: pip install openai")
+
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY,
+        default_headers={
+            "HTTP-Referer": "https://abdalla-eissa-design.vercel.app",
+            "X-Title": "Abdalla Eissa for Design — seeding script",
+        },
+    )
+
+    img_bytes, mime = _fetch_image_bytes(photo["image_url"])
+    b64 = base64.b64encode(img_bytes).decode()
+    data_url = f"data:{mime};base64,{b64}"
+
+    resp = client.chat.completions.create(
+        model=OPENROUTER_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": build_prompt_instructions(category_name, photo)},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            }
+        ],
+        max_tokens=1000,
+        temperature=0.7,
+    )
+    return resp.choices[0].message.content.strip()
 
 
 def stub_prompt(category_name: str) -> str:
@@ -247,13 +359,13 @@ def stub_prompt(category_name: str) -> str:
 # ── Pipeline ─────────────────────────────────────────────────────────────────
 
 def process_category(sb, cat, per_cat, free_count, existing,
-                     skip_prompts, dry_run, source_fn: Callable):
+                     skip_prompts, dry_run, source_fn, llm_fn, llm_sleep):
     print(f"\n📂 {cat['name']} ({cat['slug']})")
     query = SEARCH_MODIFIERS.get(cat["slug"], f"{cat['name']} product photography advertisement")
     print(f"   Query: {query}")
 
     try:
-        photos = source_fn(query, per_cat * 2)   # over-fetch to skip duplicates
+        photos = source_fn(query, per_cat * 2)
     except Exception as e:
         print(f"   ❌ Source search failed: {e}")
         return 0, 0
@@ -275,14 +387,14 @@ def process_category(sb, cat, per_cat, free_count, existing,
             continue
 
         try:
-            prompt = stub_prompt(cat["name"]) if skip_prompts else gen_meta_prompt(cat["name"], photo)
+            prompt = stub_prompt(cat["name"]) if skip_prompts else llm_fn(cat["name"], photo)
             insert_style(sb, cat, photo, is_premium, prompt)
             if photo.get("_ping"):
                 photo["_ping"]()
             inserted += 1
             print(f"   [{inserted:3d}/{per_cat}] {tier}: {photo['id']}")
             if not skip_prompts:
-                time.sleep(GEMINI_SLEEP)
+                time.sleep(llm_sleep)
         except Exception as e:
             failed += 1
             print(f"   ❌ Failed {photo['id']}: {e}")
@@ -291,31 +403,44 @@ def process_category(sb, cat, per_cat, free_count, existing,
 
 
 def main():
-    p = argparse.ArgumentParser(description="Seed images + Gemini prompts.")
-    p.add_argument("--source",      choices=["pexels", "unsplash"], default="pexels",
+    p = argparse.ArgumentParser(description="Seed images + meta_prompts.")
+    p.add_argument("--source", choices=["pexels", "pixabay", "unsplash"], default="pexels",
                    help="Image source (default: pexels)")
+    p.add_argument("--llm", choices=["gemini-direct", "openrouter"], default="gemini-direct",
+                   help="Prompt generator (default: gemini-direct)")
     p.add_argument("--per-cat",     type=int, default=100, help="Images per category (default 100)")
     p.add_argument("--free-count",  type=int, default=5,   help="Free images per category (default 5)")
     p.add_argument("--category",    type=str, default=None, help="Only process this category slug")
-    p.add_argument("--skip-prompts", action="store_true", help="Insert with stub prompt instead of calling Gemini")
+    p.add_argument("--skip-prompts", action="store_true", help="Insert with stub prompt only")
     p.add_argument("--dry-run",     action="store_true", help="Print plan, no DB writes")
     args = p.parse_args()
 
     require("SUPABASE_SERVICE_KEY", SERVICE_KEY)
+
     if args.source == "pexels":
-        require("PEXELS_API_KEY", PEXELS_KEY)
-        source_fn = search_pexels
+        require("PEXELS_API_KEY", PEXELS_KEY);    source_fn = search_pexels
+    elif args.source == "pixabay":
+        require("PIXABAY_API_KEY", PIXABAY_KEY);  source_fn = search_pixabay
     else:
-        require("UNSPLASH_ACCESS_KEY", UNSPLASH_KEY)
-        source_fn = search_unsplash
-    if not args.skip_prompts and not args.dry_run:
+        require("UNSPLASH_ACCESS_KEY", UNSPLASH_KEY); source_fn = search_unsplash
+
+    if args.skip_prompts or args.dry_run:
+        llm_fn, llm_sleep = (lambda *_: ""), 0.0
+    elif args.llm == "openrouter":
+        require("OPENROUTER_API_KEY", OPENROUTER_API_KEY)
+        llm_fn, llm_sleep = gen_prompt_openrouter, LLM_SLEEP["openrouter"]
+    else:
         require("GEMINI_API_KEY", GEMINI_API_KEY)
+        llm_fn, llm_sleep = gen_prompt_gemini_direct, LLM_SLEEP["gemini-direct"]
 
     sb = create_client(SUPABASE_URL, SERVICE_KEY)
 
-    print(f"🌱 Seeding from {args.source.upper()}: per_cat={args.per_cat}, "
-          f"free_count={args.free_count}, category={args.category or 'ALL'}, "
-          f"skip_prompts={args.skip_prompts}, dry_run={args.dry_run}")
+    print(f"🌱 Seeding source={args.source} llm={args.llm} "
+          f"per_cat={args.per_cat} free={args.free_count} "
+          f"category={args.category or 'ALL'} "
+          f"skip_prompts={args.skip_prompts} dry_run={args.dry_run}")
+    if args.llm == "openrouter" and not args.skip_prompts and not args.dry_run:
+        print(f"   OpenRouter model: {OPENROUTER_MODEL}")
 
     cats = get_active_categories(sb, args.category)
     if not cats:
@@ -329,7 +454,8 @@ def main():
     for cat in cats:
         ok, fail = process_category(
             sb, cat, args.per_cat, args.free_count,
-            existing, args.skip_prompts, args.dry_run, source_fn,
+            existing, args.skip_prompts, args.dry_run,
+            source_fn, llm_fn, llm_sleep,
         )
         total_ok += ok
         total_fail += fail
