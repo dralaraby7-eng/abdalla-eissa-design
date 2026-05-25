@@ -145,7 +145,10 @@ def insert_style(sb, category, photo_record, is_premium, meta_prompt):
 # ── Image-source adapters ─────────────────────────────────────────────────────
 # Each adapter returns a list of dicts with a unified shape:
 #   { "id": str, "image_url": str, "alt": str, "description": str|None,
-#     "tags": [str], "_ping": Callable | None }
+#     "tags": [str], "_ping": Callable | None, "_quality": float }
+#
+# _quality is a relative score used later to put the very best photos in the
+# FREE tier and the rest in PREMIUM.
 
 def search_pexels(query: str, count: int) -> list[dict]:
     photos, page = [], 1
@@ -164,14 +167,17 @@ def search_pexels(query: str, count: int) -> list[dict]:
         results = r.json().get("photos", [])
         if not results:
             break
-        for p in results:
+        # Pexels orders results by curated relevance; earlier = better.
+        base = 100000 - (page - 1) * 100
+        for idx, p in enumerate(results):
             photos.append({
                 "id":          str(p["id"]),
                 "image_url":   p["src"]["large"],
                 "alt":         p.get("alt") or "",
                 "description": p.get("alt") or None,
-                "tags":        [],   # Pexels doesn't expose tags
+                "tags":        [],
                 "_ping":       None,
+                "_quality":    float(base - idx),
             })
         page += 1
     return photos[:count]
@@ -208,6 +214,11 @@ def search_pixabay(query: str, count: int) -> list[dict]:
             break
         for p in results:
             tags_csv = p.get("tags", "")
+            likes     = int(p.get("likes", 0) or 0)
+            downloads = int(p.get("downloads", 0) or 0)
+            views     = int(p.get("views", 0) or 0)
+            # Weight: likes count strongest, then downloads, then views.
+            quality = likes * 5 + downloads * 1 + views * 0.05
             photos.append({
                 "id":          str(p["id"]),
                 "image_url":   p.get("largeImageURL") or p.get("webformatURL"),
@@ -215,6 +226,7 @@ def search_pixabay(query: str, count: int) -> list[dict]:
                 "description": tags_csv or None,
                 "tags":        [t.strip() for t in tags_csv.split(",") if t.strip()],
                 "_ping":       None,
+                "_quality":    float(quality),
             })
         page += 1
         time.sleep(0.6)   # stay well under 100/min
@@ -242,6 +254,7 @@ def search_unsplash(query: str, count: int) -> list[dict]:
         for p in results:
             dl_loc = p.get("links", {}).get("download_location")
             ping = (lambda url=dl_loc: _safe_get(url, headers)) if dl_loc else None
+            likes = int(p.get("likes", 0) or 0)
             photos.append({
                 "id":          p["id"],
                 "image_url":   p["urls"]["regular"],
@@ -249,6 +262,7 @@ def search_unsplash(query: str, count: int) -> list[dict]:
                 "description": p.get("description") or p.get("alt_description"),
                 "tags":        [t.get("title", "") for t in p.get("tags", []) if t.get("title")],
                 "_ping":       ping,
+                "_quality":    float(likes),
             })
         page += 1
     return photos[:count]
@@ -371,19 +385,29 @@ def process_category(sb, cat, per_cat, free_count, existing,
         return 0, 0
     print(f"   {len(photos)} candidates returned")
 
+    # Drop dupes (already in DB) BEFORE sorting so we always pick from
+    # fresh candidates only.
+    photos = [p for p in photos if p["image_url"] not in existing]
+
+    # Sort by quality DESC so the highest-scored photos take the FREE slots.
+    photos.sort(key=lambda p: p.get("_quality", 0.0), reverse=True)
+    photos = photos[:per_cat]
+
+    if photos:
+        top_q = photos[0].get("_quality", 0.0)
+        last_q = photos[-1].get("_quality", 0.0)
+        print(f"   Top quality score: {top_q:.0f}   Lowest in batch: {last_q:.0f}")
+
     inserted, failed = 0, 0
-    for photo in photos:
-        if inserted >= per_cat:
-            break
-        if photo["image_url"] in existing:
-            continue
+    for idx, photo in enumerate(photos):
         existing.add(photo["image_url"])
-        is_premium = inserted >= free_count
+        is_premium = idx >= free_count
         tier = "PREM" if is_premium else "FREE"
 
         if dry_run:
             inserted += 1
-            print(f"   [{inserted:3d}/{per_cat}] {tier} (dry-run) {photo['id']}")
+            print(f"   [{inserted:3d}/{per_cat}] {tier} (dry-run) "
+                  f"q={photo.get('_quality', 0):.0f}  {photo['id']}")
             continue
 
         try:
@@ -392,12 +416,22 @@ def process_category(sb, cat, per_cat, free_count, existing,
             if photo.get("_ping"):
                 photo["_ping"]()
             inserted += 1
-            print(f"   [{inserted:3d}/{per_cat}] {tier}: {photo['id']}")
+            print(f"   [{inserted:3d}/{per_cat}] {tier} "
+                  f"q={photo.get('_quality', 0):.0f}: {photo['id']}")
             if not skip_prompts:
                 time.sleep(llm_sleep)
         except Exception as e:
             failed += 1
-            print(f"   ❌ Failed {photo['id']}: {e}")
+            err_msg = str(e)
+            print(f"   ❌ Failed {photo['id']}: {err_msg[:140]}")
+            # Fail fast on Gemini daily-quota exhaustion — no point continuing.
+            if "free_tier_requests" in err_msg or "quota_id" in err_msg.lower():
+                sys.exit(
+                    "\n💥 Gemini free-tier DAILY quota exhausted. Retrying won't help "
+                    "until the quota resets (tomorrow PST).\n"
+                    "Switch to OpenRouter for unlimited paid calls:\n"
+                    "   python seed_images.py --source pixabay --llm openrouter ...\n"
+                )
 
     return inserted, failed
 
