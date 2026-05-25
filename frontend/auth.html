@@ -139,7 +139,18 @@
 <script src="js/config.js?v=5"></script>
 <script src="js/auth.js?v=5"></script>
 <script>
-  const backUrl = getParam('back') || 'index.html';
+  // Sanitize the ?back= param to prevent open-redirect attacks:
+  // only allow same-origin relative paths.
+  const backUrl = (() => {
+    const raw = getParam('back') || 'index.html';
+    try {
+      const url = new URL(raw, window.location.origin);
+      if (url.origin !== window.location.origin) return 'index.html';
+      return url.pathname.replace(/^\//, '') + url.search + url.hash || 'index.html';
+    } catch {
+      return 'index.html';
+    }
+  })();
   let lastLoginEmail = '';
 
   document.addEventListener('DOMContentLoaded', async () => {

@@ -2,15 +2,22 @@
 add_category_styles.py — Add ad styles for all categories
 Run: python add_category_styles.py
 """
+import os
+import sys
+from pathlib import Path
 from supabase import create_client
 
-SUPABASE_URL = "https://ukjwbcrbnutxemwsebsc.supabase.co"
-SERVICE_KEY  = (
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-    "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrandiY3JibnV0eGVtd3NlYnNjIiwi"
-    "***SERVICE_ROLE_PAYLOAD_REMOVED***"
-    "***SERVICE_ROLE_SIG_REMOVED***"
-)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+    load_dotenv(Path(__file__).parent / "backend" / ".env")
+except ImportError:
+    pass
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://ukjwbcrbnutxemwsebsc.supabase.co")
+SERVICE_KEY  = os.getenv("SUPABASE_SERVICE_KEY", "")
+if not SERVICE_KEY:
+    sys.exit("ERROR: SUPABASE_SERVICE_KEY is not set. Put it in .env or export it.")
 
 sb = create_client(SUPABASE_URL, SERVICE_KEY)
 

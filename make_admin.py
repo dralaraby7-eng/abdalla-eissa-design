@@ -9,18 +9,32 @@ make_admin.py — Abdalla Eissa for Design
 Run: python make_admin.py
 """
 
+import os
+import secrets
+import sys
+import string
+from pathlib import Path
 import requests
 from supabase import create_client
 
-SUPABASE_URL  = "https://ukjwbcrbnutxemwsebsc.supabase.co"
-SERVICE_KEY   = (
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-    "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrandiY3JibnV0eGVtd3NlYnNjIiwi"
-    "***SERVICE_ROLE_PAYLOAD_REMOVED***"
-    "***SERVICE_ROLE_SIG_REMOVED***"
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+    load_dotenv(Path(__file__).parent / "backend" / ".env")
+except ImportError:
+    pass
+
+SUPABASE_URL  = os.getenv("SUPABASE_URL", "https://ukjwbcrbnutxemwsebsc.supabase.co")
+SERVICE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "")
+ADMIN_EMAIL   = os.getenv("ADMIN_EMAIL", "")
+TEMP_PASSWORD = os.getenv("ADMIN_TEMP_PASSWORD", "") or (
+    "".join(secrets.choice(string.ascii_letters + string.digits + "!@#$%") for _ in range(16))
 )
-ADMIN_EMAIL    = "dr.alaraby7@gmail.com"
-TEMP_PASSWORD  = "Admin@2024Design"   # User should change this after first login
+
+if not SERVICE_KEY:
+    sys.exit("ERROR: SUPABASE_SERVICE_KEY is not set. Put it in .env or export it.")
+if not ADMIN_EMAIL:
+    sys.exit("ERROR: ADMIN_EMAIL is not set. Set it in .env or export it.")
 
 headers = {
     "apikey": SERVICE_KEY,

@@ -30,7 +30,11 @@ function showToast(message, type = 'info') {
   const t = document.createElement('div');
   t.className = `toast ${type}`;
   const icons = { success: 'fa-check-circle', error: 'fa-circle-xmark', info: 'fa-circle-info' };
-  t.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i><span>${message}</span>`;
+  const icon = document.createElement('i');
+  icon.className = `fa-solid ${icons[type] || icons.info}`;
+  const span = document.createElement('span');
+  span.textContent = String(message);   // textContent, not innerHTML — safe against XSS
+  t.append(icon, span);
   container.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(20px)'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 3500);
 }
