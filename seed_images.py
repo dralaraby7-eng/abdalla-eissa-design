@@ -331,7 +331,7 @@ def gen_prompt_openrouter(category_name: str, photo: dict) -> str:
         api_key=OPENROUTER_API_KEY,
         default_headers={
             "HTTP-Referer": "https://abdalla-eissa-design.vercel.app",
-            "X-Title": "Abdalla Eissa for Design — seeding script",
+            "X-Title": "Abdalla Eissa for Design - seeding script",
         },
     )
 
