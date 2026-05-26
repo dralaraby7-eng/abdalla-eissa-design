@@ -21,7 +21,18 @@ async function initAuth() {
 }
 
 async function fetchProfile(userId) {
-  const { data } = await sb.from('profiles').select('*').eq('id', userId).single();
+  let { data } = await sb.from('profiles').select('*').eq('id', userId).single();
+  if (!data) {
+    // Profile row missing — the signup trigger may have never fired.
+    // Call the self-heal RPC to create it now, then re-read.
+    try {
+      await sb.rpc('ensure_profile');
+      const retry = await sb.from('profiles').select('*').eq('id', userId).single();
+      data = retry.data;
+    } catch (e) {
+      console.warn('ensure_profile RPC failed:', e);
+    }
+  }
   return data;
 }
 
