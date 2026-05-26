@@ -42,8 +42,10 @@ app.add_middleware(
 # --- Routes -------------------------------------------------
 from routes.payments import router as payments_router
 from routes.admin_api import router as admin_router
+from routes.prompts import router as prompts_router
 app.include_router(payments_router)
 app.include_router(admin_router)
+app.include_router(prompts_router)
 
 
 @app.get("/")

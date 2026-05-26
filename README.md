@@ -98,6 +98,24 @@ Then log in and navigate to `admin.html` to manage categories and styles.
 2. Copy the public URL of each uploaded image
 3. In Admin → **Add Style** → paste the URL, write the meta prompt, choose category
 
+### 6. Curate Distinguished Images
+
+Use `curate_distinguished_images.py` to replace generic/random images with a
+stronger 30-image catalog per category. Start with a dry run:
+
+```bash
+python curate_distinguished_images.py --source pexels --per-cat 30 --oversample 240 --dry-run
+```
+
+Then test one category before replacing all visible styles:
+
+```bash
+python curate_distinguished_images.py --source pexels --category beauty --per-cat 30 --hide-existing
+python curate_distinguished_images.py --source pexels --per-cat 30 --hide-existing
+```
+
+Full process: `docs/image-curation-playbook.md`.
+
 ---
 
 ## Paymob Setup

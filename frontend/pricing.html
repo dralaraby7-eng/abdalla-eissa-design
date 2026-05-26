@@ -199,10 +199,11 @@
     try {
       const res = await fetch(`${API_URL}/api/payments/create-order`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(await getAuthHeaders())
+        },
         body: JSON.stringify({
-          user_id: currentUser.id,
-          email: currentUser.email,
           billing: 'lifetime_egp'
         })
       });

@@ -17,8 +17,9 @@ async function loadStyle(id) {
 
   const { data: style, error } = await sb
     .from('ad_styles')
-    .select('*')
+    .select('id, category_id, title, image_url, tags, is_premium, description, view_count, created_at, prompt_preview')
     .eq('id', id)
+    .eq('is_active', true)
     .single();
 
   if (error || !style) {
@@ -43,15 +44,27 @@ async function loadStyle(id) {
   sb.rpc('increment_view_count', { style_id: id }).catch(() => {});
 
   const userCan = isPremium() || isAdmin() || !style.is_premium;
-  const promptText = style.meta_prompt || '';
-  const preview = promptText.slice(0, FREE_PREVIEW_CHARS);
-  const hasMore = promptText.length > FREE_PREVIEW_CHARS;
+  let promptText = '';
+  if (userCan) {
+    try {
+      const res = await fetch(`${API_URL}/api/prompts/${encodeURIComponent(id)}`, {
+        headers: await getAuthHeaders()
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Could not load prompt');
+      promptText = data.prompt || '';
+    } catch (err) {
+      showToast(err.message || 'Could not load prompt.', 'error');
+    }
+  }
+  const preview = style.prompt_preview || '';
+  const hasMore = !!preview;
 
   page.innerHTML = `
     <div class="breadcrumb" style="margin-bottom:1.5rem;">
       <a href="index.html"><i class="fa-solid fa-house"></i> Home</a>
       <span class="sep">/</span>
-      <a href="category.html?slug=${cat?.slug || ''}">${cat?.icon || ''} ${escapeHtml(cat?.name || 'Category')}</a>
+      <a href="category.html?slug=${encodeURIComponent(cat?.slug || '')}">${escapeHtml(cat?.icon || '')} ${escapeHtml(cat?.name || 'Category')}</a>
       <span class="sep">/</span>
       <span>${escapeHtml(style.title)}</span>
     </div>

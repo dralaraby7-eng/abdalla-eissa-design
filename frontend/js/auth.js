@@ -57,14 +57,15 @@ function renderNavAuth() {
 
   if (currentUser) {
     const name = currentProfile?.full_name || currentUser.email.split('@')[0];
-    const initial = name.charAt(0).toUpperCase();
+    const safeName = escapeHtml(name);
+    const initial = escapeHtml(name.charAt(0).toUpperCase());
     const planBadge = isPremium()
       ? '<span class="badge-premium">Premium</span>'
       : '<span class="badge-free">Free</span>';
     actionsEl.innerHTML = `
       <div class="nav-user">
         <div class="nav-avatar">${initial}</div>
-        <span>${name}</span>
+        <span>${safeName}</span>
         ${planBadge}
       </div>
       ${isAdmin() ? '<a href="admin.html" class="btn btn-sm btn-outline"><i class="fa-solid fa-shield-halved"></i> Admin</a>' : ''}

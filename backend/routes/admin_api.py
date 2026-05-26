@@ -8,36 +8,14 @@ import os
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
+from auth_utils import get_supabase as _get_supabase, require_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
-def _get_supabase():
-    from main import supabase
-    return supabase
-
-
 def _verify_admin(request: Request):
     """Verify the caller is an authenticated admin user."""
-    sb = _get_supabase()
-    auth = request.headers.get("authorization", "")
-    token = auth.replace("Bearer ", "").strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-
-    try:
-        user_resp = sb.auth.get_user(token)
-        user = user_resp.user
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Token verification failed")
-
-    profile = sb.table("profiles").select("is_admin").eq("id", user.id).single().execute()
-    if not profile.data or not profile.data.get("is_admin"):
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    return user
+    return require_admin(request)
 
 
 class CreateUserBody(BaseModel):
@@ -50,6 +28,94 @@ class CreateUserBody(BaseModel):
 class SetPremiumBody(BaseModel):
     user_id: str
     action: str  # "grant" or "revoke"
+
+
+class CategoryBody(BaseModel):
+    name: str
+    slug: str
+    icon: str = "🎨"
+    description: Optional[str] = None
+    display_order: int = 0
+
+
+class StyleBody(BaseModel):
+    category_id: str
+    title: str
+    description: Optional[str] = None
+    image_url: str
+    meta_prompt: str
+    tags: list[str] = []
+    is_premium: bool = False
+    is_active: bool = True
+
+
+def _style_payload(body: StyleBody) -> dict:
+    data = body.model_dump()
+    data["prompt_preview"] = body.meta_prompt[:140]
+    return data
+
+
+@router.get("/catalog")
+async def admin_catalog(request: Request):
+    """Return all data needed by the admin panel."""
+    _verify_admin(request)
+    sb = _get_supabase()
+
+    categories = sb.table("categories").select("*").order("display_order").execute()
+    styles = (
+        sb.table("ad_styles")
+        .select("*, categories(name)")
+        .order("created_at", desc=True)
+        .execute()
+    )
+    profiles = sb.table("profiles").select("*").order("created_at", desc=True).execute()
+    return {
+        "categories": categories.data or [],
+        "styles": styles.data or [],
+        "users": profiles.data or [],
+    }
+
+
+@router.post("/categories")
+async def create_category(body: CategoryBody, request: Request):
+    _verify_admin(request)
+    result = _get_supabase().table("categories").insert(body.model_dump()).execute()
+    return {"success": True, "category": (result.data or [None])[0]}
+
+
+@router.put("/categories/{category_id}")
+async def update_category(category_id: str, body: CategoryBody, request: Request):
+    _verify_admin(request)
+    result = _get_supabase().table("categories").update(body.model_dump()).eq("id", category_id).execute()
+    return {"success": True, "category": (result.data or [None])[0]}
+
+
+@router.delete("/categories/{category_id}")
+async def delete_category(category_id: str, request: Request):
+    _verify_admin(request)
+    _get_supabase().table("categories").delete().eq("id", category_id).execute()
+    return {"success": True}
+
+
+@router.post("/styles")
+async def create_style(body: StyleBody, request: Request):
+    _verify_admin(request)
+    result = _get_supabase().table("ad_styles").insert(_style_payload(body)).execute()
+    return {"success": True, "style": (result.data or [None])[0]}
+
+
+@router.put("/styles/{style_id}")
+async def update_style(style_id: str, body: StyleBody, request: Request):
+    _verify_admin(request)
+    result = _get_supabase().table("ad_styles").update(_style_payload(body)).eq("id", style_id).execute()
+    return {"success": True, "style": (result.data or [None])[0]}
+
+
+@router.delete("/styles/{style_id}")
+async def delete_style(style_id: str, request: Request):
+    _verify_admin(request)
+    _get_supabase().table("ad_styles").delete().eq("id", style_id).execute()
+    return {"success": True}
 
 
 @router.post("/create-user")

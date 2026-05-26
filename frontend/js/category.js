@@ -52,8 +52,9 @@ async function loadCategory(slug) {
 
   const { data: styles, error: stylesErr } = await sb
     .from('ad_styles')
-    .select('id, title, image_url, tags, is_premium, description, view_count, created_at, meta_prompt')
+    .select('id, title, image_url, tags, is_premium, description, view_count, created_at, prompt_preview')
     .eq('category_id', cat.id)
+    .eq('is_active', true)
     .order('created_at', { ascending: false });
 
   if (stylesErr || !styles) {
@@ -127,7 +128,7 @@ function renderStyles() {
 
 // ── Style Viewer Modal ────────────────────────────────────────
 
-function svOpen(id) {
+async function svOpen(id) {
   const overlay = document.getElementById('svOverlay');
   const inner = document.getElementById('svInner');
   if (!overlay || !inner) return;
@@ -151,9 +152,21 @@ function svOpen(id) {
   const userCan = (typeof isPremium === 'function' && isPremium())
                 || (typeof isAdmin === 'function' && isAdmin())
                 || !style.is_premium;
-  const promptText = style.meta_prompt || '';
-  const preview = promptText.slice(0, FREE_PREVIEW_CHARS);
-  const hasMore = promptText.length > FREE_PREVIEW_CHARS;
+  let promptText = '';
+  if (userCan) {
+    try {
+      const res = await fetch(`${API_URL}/api/prompts/${encodeURIComponent(id)}`, {
+        headers: await getAuthHeaders()
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Could not load prompt');
+      promptText = data.prompt || '';
+    } catch (err) {
+      showToast(err.message || 'Could not load prompt.', 'error');
+    }
+  }
+  const preview = style.prompt_preview || '';
+  const hasMore = !!preview;
   const seed = id.slice(0, 8);
   const loggedIn = typeof currentUser !== 'undefined' && currentUser;
 

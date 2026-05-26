@@ -26,15 +26,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadAdminData() {
-  const [catsRes, stylesRes, usersRes] = await Promise.all([
-    sb.from('categories').select('*').order('display_order'),
-    sb.from('ad_styles').select('*, categories(name)').order('created_at', { ascending: false }),
-    sb.from('profiles').select('*').order('created_at', { ascending: false })
-  ]);
-
-  adminCategories = catsRes.data || [];
-  adminStyles = stylesRes.data || [];
-  adminUsers = usersRes.data || [];
+  const data = await adminFetchJson('/api/admin/catalog');
+  adminCategories = data.categories || [];
+  adminStyles = data.styles || [];
+  adminUsers = data.users || [];
 
   const premiumCount = adminUsers.filter(u => u.plan_type === 'premium').length;
 
@@ -120,6 +115,20 @@ async function loadAdminData() {
   `;
 
   populateCategorySelect();
+}
+
+async function adminFetchJson(path, options = {}) {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(await getAuthHeaders()),
+      ...(options.headers || {})
+    }
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Admin request failed');
+  return data;
 }
 
 function renderUsersTable() {
@@ -242,25 +251,32 @@ async function handleSaveStyle(e) {
     image_url:    document.getElementById('styleImageUrl').value.trim(),
     meta_prompt:  document.getElementById('stylePrompt').value.trim(),
     tags,
-    is_premium: document.getElementById('styleIsPremium').checked
+    is_premium: document.getElementById('styleIsPremium').checked,
+    is_active: true
   };
-  let error;
-  if (id) {
-    ({ error } = await sb.from('ad_styles').update(payload).eq('id', id));
-  } else {
-    ({ error } = await sb.from('ad_styles').insert(payload));
+  try {
+    await adminFetchJson(id ? `/api/admin/styles/${encodeURIComponent(id)}` : '/api/admin/styles', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(payload)
+    });
+    showToast(id ? 'Style updated!' : 'Style added!', 'success');
+    closeModal();
+    await loadAdminData();
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
   }
-  btn.disabled = false;
-  if (error) { showToast(error.message, 'error'); return; }
-  showToast(id ? 'Style updated!' : 'Style added!', 'success');
-  closeModal();
-  await loadAdminData();
 }
 
 async function deleteStyle(id) {
   if (!confirm('Delete this style?')) return;
-  const { error } = await sb.from('ad_styles').delete().eq('id', id);
-  if (error) { showToast(error.message, 'error'); return; }
+  try {
+    await adminFetchJson(`/api/admin/styles/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
+  }
   showToast('Style deleted.', 'success');
   await loadAdminData();
 }
@@ -299,13 +315,15 @@ async function handleSaveCategory(e) {
     description:   document.getElementById('catDesc').value.trim() || null,
     display_order: parseInt(document.getElementById('catOrder').value) || 0
   };
-  let error;
-  if (id) {
-    ({ error } = await sb.from('categories').update(payload).eq('id', id));
-  } else {
-    ({ error } = await sb.from('categories').insert(payload));
+  try {
+    await adminFetchJson(id ? `/api/admin/categories/${encodeURIComponent(id)}` : '/api/admin/categories', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
   }
-  if (error) { showToast(error.message, 'error'); return; }
   showToast(id ? 'Category updated!' : 'Category added!', 'success');
   closeCatModal();
   await loadAdminData();
@@ -313,8 +331,12 @@ async function handleSaveCategory(e) {
 
 async function deleteCategory(id) {
   if (!confirm('Delete this category? All its styles will also be deleted.')) return;
-  const { error } = await sb.from('categories').delete().eq('id', id);
-  if (error) { showToast(error.message, 'error'); return; }
+  try {
+    await adminFetchJson(`/api/admin/categories/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
+  }
   showToast('Category deleted.', 'success');
   await loadAdminData();
 }
@@ -322,25 +344,36 @@ async function deleteCategory(id) {
 // ── User Management ────────────────────────────────────────────
 
 async function adminGrantPremium(userId) {
-  // Grant lifetime premium — no expiry date
-  const { error } = await sb.from('profiles').update({
-    plan_type: 'premium',
-    subscription_expires_at: null   // null = lifetime
-  }).eq('id', userId);
-  if (error) { showToast(error.message, 'error'); return; }
+  const error = await adminSetPremium(userId, 'grant');
+  if (error) { showToast(error, 'error'); return; }
   showToast('Lifetime Premium granted.', 'success');
   await loadAdminData();
 }
 
 async function adminRevokePremium(userId) {
   if (!confirm('Revoke premium access for this user?')) return;
-  const { error } = await sb.from('profiles').update({
-    plan_type: 'free',
-    subscription_expires_at: null
-  }).eq('id', userId);
-  if (error) { showToast(error.message, 'error'); return; }
+  const error = await adminSetPremium(userId, 'revoke');
+  if (error) { showToast(error, 'error'); return; }
   showToast('Premium revoked.', 'success');
   await loadAdminData();
+}
+
+async function adminSetPremium(userId, action) {
+  try {
+    const res = await fetch(`${API_URL}/api/admin/set-premium`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeaders())
+      },
+      body: JSON.stringify({ user_id: userId, action })
+    });
+    const data = await res.json();
+    if (!res.ok) return data.detail || 'Could not update premium access';
+    return null;
+  } catch (err) {
+    return err.message || 'Could not update premium access';
+  }
 }
 
 async function adminResetPassword(email) {

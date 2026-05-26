@@ -38,8 +38,8 @@ async function loadCategories() {
   document.getElementById('statCategories').textContent = categories.length;
 
   grid.innerHTML = categories.map(cat => `
-    <a href="category.html?slug=${cat.slug}" class="category-card">
-      <span class="category-icon">${cat.icon || '🎨'}</span>
+    <a href="category.html?slug=${encodeURIComponent(cat.slug)}" class="category-card">
+      <span class="category-icon">${escapeHtml(cat.icon || '🎨')}</span>
       <span class="category-name">${escapeHtml(cat.name)}</span>
       <span class="category-desc">${escapeHtml(cat.description || '')}</span>
     </a>

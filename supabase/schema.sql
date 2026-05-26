@@ -23,9 +23,11 @@ create table public.ad_styles (
   title text not null,
   image_url text not null,
   meta_prompt text not null,
+  prompt_preview text,
   description text,
   tags text[] default '{}',
   is_premium boolean default false,
+  is_active boolean default true,
   view_count integer default 0,
   created_at timestamptz default now()
 );
@@ -51,6 +53,21 @@ create table public.prompt_views (
   unique(user_id, style_id)
 );
 
+-- Payment Orders (server-side Paymob verification)
+create table public.payment_orders (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  email text not null,
+  paymob_order_id text unique not null,
+  merchant_order_id text unique not null,
+  amount_cents integer not null,
+  currency text not null default 'EGP',
+  status text not null default 'pending' check (status in ('pending', 'paid', 'failed')),
+  transaction_id text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 -- ============================================================
 -- Row Level Security
 -- ============================================================
@@ -59,6 +76,7 @@ alter table public.categories enable row level security;
 alter table public.ad_styles enable row level security;
 alter table public.profiles enable row level security;
 alter table public.prompt_views enable row level security;
+alter table public.payment_orders enable row level security;
 
 -- Categories: public read
 create policy "categories_public_read" on public.categories
@@ -92,6 +110,10 @@ create policy "profiles_admin_read_all" on public.profiles
 create policy "prompt_views_own" on public.prompt_views
   for all using (auth.uid() = user_id);
 
+-- Payment orders: backend service role only
+create policy "payment_orders_no_client_access" on public.payment_orders
+  for all using (false) with check (false);
+
 -- ============================================================
 -- Auto-create profile on signup
 -- ============================================================
@@ -113,6 +135,20 @@ create or replace function public.increment_view_count(style_id uuid)
 returns void as $$
   update public.ad_styles set view_count = view_count + 1 where id = style_id;
 $$ language sql security definer;
+
+create or replace function public.set_prompt_preview()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.prompt_preview := left(coalesce(new.meta_prompt, ''), 140);
+  return new;
+end;
+$$;
+
+create trigger set_prompt_preview_before_write
+  before insert or update of meta_prompt on public.ad_styles
+  for each row execute function public.set_prompt_preview();
 
 -- ============================================================
 -- Supabase Storage Buckets (run these too)

@@ -54,7 +54,7 @@ function renderDashboard() {
 
   document.getElementById('dashboardContent').innerHTML = `
     <div style="display:flex;align-items:center;gap:1rem;margin-bottom:2.5rem;flex-wrap:wrap;">
-      <div class="nav-avatar" style="width:56px;height:56px;font-size:1.5rem;">${name.charAt(0).toUpperCase()}</div>
+      <div class="nav-avatar" style="width:56px;height:56px;font-size:1.5rem;">${escapeHtml(name.charAt(0).toUpperCase())}</div>
       <div>
         <h1 style="font-size:1.5rem;font-weight:700;color:var(--white);">Welcome, ${escapeHtml(name)}</h1>
         <p style="color:var(--text-muted);font-size:0.875rem;">${escapeHtml(currentUser.email)}</p>

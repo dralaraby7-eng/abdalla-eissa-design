@@ -136,9 +136,11 @@ def insert_style(sb, category, photo_record, is_premium, meta_prompt):
         "title":       title,
         "image_url":   photo_record["image_url"],
         "meta_prompt": meta_prompt,
+        "prompt_preview": meta_prompt[:140],
         "description": photo_record.get("description") or photo_record.get("alt"),
         "tags":        tags,
         "is_premium":  is_premium,
+        "is_active":   True,
     }).execute()
 
 
