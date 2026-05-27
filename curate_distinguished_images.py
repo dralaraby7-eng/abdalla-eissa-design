@@ -258,8 +258,40 @@ def hide_existing_styles(sb, category_id: str, dry_run: bool):
     sb.table("ad_styles").update({"is_active": False}).eq("category_id", category_id).execute()
 
 
+def active_style_count(sb, category_id: str) -> int:
+    result = (
+        sb.table("ad_styles")
+        .select("id")
+        .eq("category_id", category_id)
+        .eq("is_active", True)
+        .execute()
+    )
+    return len(result.data or [])
+
+
+def existing_style_urls(sb, category_id: str) -> set[str]:
+    result = sb.table("ad_styles").select("image_url").eq("category_id", category_id).execute()
+    return {row["image_url"] for row in (result.data or []) if row.get("image_url")}
+
+
+def generate_prompt_with_retry(llm_fn, category_name: str, photo: dict, retries: int = 2) -> str:
+    last_error = None
+    for attempt in range(retries + 1):
+        try:
+            return llm_fn(category_name, photo)
+        except Exception as exc:
+            last_error = exc
+            msg = str(exc).lower()
+            if "quota" in msg or "resource_exhausted" in msg or "free_tier_requests" in msg:
+                raise
+            if attempt < retries:
+                time.sleep(5 * (attempt + 1))
+    raise last_error
+
+
 def insert_selected(sb, category, photos, llm_fn, llm_sleep, free_count, dry_run):
     inserted = 0
+    failed = 0
     for index, photo in enumerate(photos):
         is_premium = index >= free_count
         tier = "PREM" if is_premium else "FREE"
@@ -270,13 +302,24 @@ def insert_selected(sb, category, photos, llm_fn, llm_sleep, free_count, dry_run
             )
             continue
 
-        prompt = llm_fn(category["name"], photo) if llm_fn else stub_prompt(category["name"])
-        insert_style(sb, category, photo, is_premium, prompt)
-        inserted += 1
-        print(f"   Inserted {index + 1:02d}/{len(photos)} {tier}: {photo['id']}")
-        if llm_fn:
-            time.sleep(llm_sleep)
-    return inserted
+        try:
+            prompt = (
+                generate_prompt_with_retry(llm_fn, category["name"], photo)
+                if llm_fn else stub_prompt(category["name"])
+            )
+            insert_style(sb, category, photo, is_premium, prompt)
+            inserted += 1
+            print(f"   Inserted {index + 1:02d}/{len(photos)} {tier}: {photo['id']}")
+            if llm_fn:
+                time.sleep(llm_sleep)
+        except Exception as exc:
+            failed += 1
+            msg = str(exc)
+            print(f"   Failed {index + 1:02d}/{len(photos)} {tier}: {photo['id']} - {msg[:180]}")
+            if "quota" in msg.lower() or "resource_exhausted" in msg.lower():
+                print("   Gemini quota/rate limit reached. Stop now and resume later, or use --llm openrouter.")
+                break
+    return inserted, failed
 
 
 def main():
@@ -307,25 +350,40 @@ def main():
     )
 
     total = 0
+    total_failed = 0
     for category in categories:
         print(f"\nCategory: {category['name']} ({category['slug']})")
+        active_count = 0 if args.hide_existing else active_style_count(sb, category["id"])
+        needed = max(0, args.per_cat - active_count)
+        if needed == 0:
+            print(f"   Already has {active_count} active styles. Skipping.")
+            continue
+
         candidates = collect_candidates(category["slug"], args.source, args.oversample)
         if not candidates:
             print("   No candidates found")
             continue
 
+        existing_urls = existing_style_urls(sb, category["id"])
+        candidates = [photo for photo in candidates if photo["image_url"] not in existing_urls]
+
         for photo in candidates:
             photo["_final_score"] = score_candidate(photo)
 
-        selected = sorted(candidates, key=lambda p: p["_final_score"], reverse=True)[:args.per_cat]
-        print(f"   Candidates: {len(candidates)}  Selected: {len(selected)}")
+        selected = sorted(candidates, key=lambda p: p["_final_score"], reverse=True)[:needed]
+        print(
+            f"   Active now: {active_count}  Need: {needed}  "
+            f"Candidates: {len(candidates)}  Selected: {len(selected)}"
+        )
 
         if args.hide_existing:
             hide_existing_styles(sb, category["id"], args.dry_run)
 
-        total += insert_selected(sb, category, selected, llm_fn, llm_sleep, args.free_count, args.dry_run)
+        inserted, failed = insert_selected(sb, category, selected, llm_fn, llm_sleep, args.free_count, args.dry_run)
+        total += inserted
+        total_failed += failed
 
-    print(f"\nDone. Inserted {total} styles.")
+    print(f"\nDone. Inserted {total} styles. Failed {total_failed}.")
 
 
 if __name__ == "__main__":
