@@ -2,6 +2,7 @@
 let allStyles = [];
 let currentFilter = 'all';
 let searchQuery = '';
+const promptCache = new Map();
 
 document.addEventListener('DOMContentLoaded', async () => {
   await initAuth();
@@ -104,6 +105,9 @@ function renderStyles() {
 
     return `
     <div class="style-card" onclick="svOpen('${style.id}')" role="button" tabindex="0"
+         onmouseenter="svPrefetchPrompt('${style.id}')"
+         onfocus="svPrefetchPrompt('${style.id}')"
+         ontouchstart="svPrefetchPrompt('${style.id}')"
          onkeydown="if(event.key==='Enter'||event.key===' ')svOpen('${style.id}')">
       <div style="overflow:hidden;">
         <img
@@ -152,23 +156,12 @@ async function svOpen(id) {
   const userCan = (typeof isPremium === 'function' && isPremium())
                 || (typeof isAdmin === 'function' && isAdmin())
                 || !style.is_premium;
-  let promptText = '';
-  if (userCan) {
-    try {
-      const res = await fetch(`${API_URL}/api/prompts/${encodeURIComponent(id)}`, {
-        headers: await getAuthHeaders()
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Could not load prompt');
-      promptText = data.prompt || '';
-    } catch (err) {
-      showToast(err.message || 'Could not load prompt.', 'error');
-    }
-  }
   const preview = style.prompt_preview || '';
   const hasMore = !!preview;
   const seed = id.slice(0, 8);
   const loggedIn = typeof currentUser !== 'undefined' && currentUser;
+  const hasCachedPrompt = promptCache.has(id);
+  const cachedPrompt = promptCache.get(id) || '';
 
   try {
     inner.innerHTML = `
@@ -198,12 +191,14 @@ async function svOpen(id) {
         <div class="prompt-block-label"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Meta Prompt</div>
 
         ${userCan
-          ? promptText
-            ? `<div class="prompt-text" id="svPromptText">${escapeHtml(promptText)}</div>
-               <button class="btn btn-primary prompt-copy-btn" onclick="svCopyPrompt()">
-                 <i class="fa-regular fa-copy"></i> Copy Prompt
-               </button>`
-            : `<div style="color:var(--text-muted);font-size:0.85rem;padding:1rem 0;">No prompt added yet for this style.</div>`
+          ? `<div class="prompt-text" id="svPromptText">${
+                hasCachedPrompt
+                  ? escapeHtml(cachedPrompt)
+                  : '<span class="spinner"></span> Loading prompt...'
+              }</div>
+             <button class="btn btn-primary prompt-copy-btn" id="svCopyBtn" onclick="svCopyPrompt()" ${hasCachedPrompt && cachedPrompt ? '' : 'disabled'}>
+               <i class="fa-regular fa-copy"></i> Copy Prompt
+             </button>`
           : `<div class="prompt-text blurred">${escapeHtml(preview)}${hasMore ? '…' : ''}</div>
              <div class="prompt-locked-overlay">
                <p><i class="fa-solid fa-lock"></i> Upgrade to access the full prompt</p>
@@ -242,11 +237,58 @@ async function svOpen(id) {
       <p style="margin-top:1rem;">Could not render this style.<br><small>${escapeHtml(String(err.message || err))}</small></p>
     </div>`;
   }
+
+  if (userCan && !hasCachedPrompt) {
+    svLoadPrompt(id);
+  }
 }
 
 function svCopyPrompt() {
   const text = document.getElementById('svPromptText')?.textContent;
-  if (text) copyToClipboard(text);
+  if (text && !text.includes('Loading prompt')) copyToClipboard(text);
+}
+
+async function svPrefetchPrompt(id) {
+  const style = allStyles.find(s => s.id === id);
+  if (!style || promptCache.has(id)) return;
+  const userCan = (typeof isPremium === 'function' && isPremium())
+                || (typeof isAdmin === 'function' && isAdmin())
+                || !style.is_premium;
+  if (!userCan) return;
+  try {
+    await svFetchPrompt(id);
+  } catch (e) { /* prefetch failures are handled on click */ }
+}
+
+async function svFetchPrompt(id) {
+  if (promptCache.has(id)) return promptCache.get(id);
+  const res = await fetch(`${API_URL}/api/prompts/${encodeURIComponent(id)}`, {
+    headers: await getAuthHeaders()
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Could not load prompt');
+  const prompt = data.prompt || '';
+  promptCache.set(id, prompt);
+  return prompt;
+}
+
+async function svLoadPrompt(id) {
+  const promptEl = document.getElementById('svPromptText');
+  const copyBtn = document.getElementById('svCopyBtn');
+  try {
+    const prompt = await svFetchPrompt(id);
+    if (promptEl) {
+      promptEl.textContent = prompt || 'No prompt added yet for this style.';
+    }
+    if (copyBtn) {
+      copyBtn.disabled = !prompt;
+    }
+  } catch (err) {
+    if (promptEl) {
+      promptEl.textContent = err.message || 'Could not load prompt.';
+    }
+    showToast(err.message || 'Could not load prompt.', 'error');
+  }
 }
 
 function svClose() {

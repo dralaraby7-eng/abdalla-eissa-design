@@ -24,6 +24,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 # Allowed origins (comma-separated in env)
 _origins_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:5500")
 allowed_origins = [o.strip() for o in _origins_raw.split(",") if o.strip()]
+frontend_url = os.getenv("FRONTEND_URL", "").strip()
+if frontend_url and frontend_url not in allowed_origins:
+    allowed_origins.append(frontend_url)
 
 app = FastAPI(
     title="Abdalla Eissa for Design API",
@@ -34,6 +37,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"^https://[a-z0-9-]+\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
