@@ -2,6 +2,9 @@
 let allStyles = [];
 let currentFilter = 'all';
 let searchQuery = '';
+let currentSort = 'newest';
+let currentView = localStorage.getItem('styleViewMode') || 'grid';
+let currentStyleId = null;
 const promptCache = new Map();
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -15,6 +18,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('searchInput')?.addEventListener('input', e => {
     searchQuery = e.target.value.toLowerCase();
     renderStyles();
+  });
+
+  document.getElementById('sortSelect')?.addEventListener('change', e => {
+    currentSort = e.target.value;
+    renderStyles();
+  });
+
+  document.querySelectorAll('.view-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === currentView);
+    btn.addEventListener('click', () => {
+      currentView = btn.dataset.view || 'grid';
+      localStorage.setItem('styleViewMode', currentView);
+      document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b === btn));
+      renderStyles();
+    });
   });
 
   document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -67,6 +85,7 @@ async function loadCategory(slug) {
 
   allStyles = styles;
   renderStyles();
+  hydratePromptCache(styles);
 
   const hasPremium = styles.some(s => s.is_premium);
   if (!isPremium() && hasPremium) {
@@ -81,6 +100,8 @@ function renderStyles() {
   let filtered = allStyles.filter(style => {
     const matchSearch = !searchQuery ||
       style.title.toLowerCase().includes(searchQuery) ||
+      (style.description || '').toLowerCase().includes(searchQuery) ||
+      (style.prompt_preview || '').toLowerCase().includes(searchQuery) ||
       (style.tags || []).some(t => t.toLowerCase().includes(searchQuery));
     const matchFilter =
       currentFilter === 'all' ||
@@ -88,6 +109,11 @@ function renderStyles() {
       (currentFilter === 'premium' && style.is_premium);
     return matchSearch && matchFilter;
   });
+
+  filtered = sortStyles(filtered);
+  grid.classList.toggle('styles-list', currentView === 'list');
+  const count = document.getElementById('resultsCount');
+  if (count) count.textContent = `${filtered.length} style${filtered.length === 1 ? '' : 's'}`;
 
   if (!filtered.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
@@ -102,6 +128,8 @@ function renderStyles() {
     const isPrem = style.is_premium;
     const userHasAccess = isPremium() || !isPrem;
     const seed = style.id.slice(0, 8);
+    const promptReady = promptCache.has(style.id);
+    const desc = style.description || style.prompt_preview || '';
 
     return `
     <div class="style-card" onclick="svOpen('${style.id}')" role="button" tabindex="0"
@@ -119,15 +147,80 @@ function renderStyles() {
         >
       </div>
       <div class="style-card-body">
-        <div class="style-card-title">${escapeHtml(style.title)}</div>
+        <div class="style-card-title-row">
+          <div class="style-card-title">${escapeHtml(style.title)}</div>
+          <span class="style-card-status ${promptReady ? 'ready' : ''}">${promptReady ? 'Ready' : 'Preview'}</span>
+        </div>
+        ${desc ? `<p class="style-card-desc">${escapeHtml(desc)}</p>` : ''}
         <div class="style-card-tags">
           ${(style.tags || []).slice(0, 3).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
+        </div>
+        <div class="style-card-actions">
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); quickCopyPrompt('${style.id}')" ${userHasAccess ? '' : 'disabled'}>
+            <i class="fa-regular fa-copy"></i> ${promptReady ? 'Copy' : 'Open'}
+          </button>
+          <span><i class="fa-regular fa-eye"></i> ${style.view_count || 0}</span>
         </div>
       </div>
       ${isPrem ? '<div class="style-card-premium-badge"><i class="fa-solid fa-crown"></i> Premium</div>' : ''}
       ${isPrem && !userHasAccess ? '<div class="style-card-lock"><i class="fa-solid fa-lock"></i></div>' : ''}
     </div>`;
   }).join('');
+}
+
+function sortStyles(styles) {
+  return [...styles].sort((a, b) => {
+    if (currentSort === 'popular') return (b.view_count || 0) - (a.view_count || 0);
+    if (currentSort === 'title') return String(a.title || '').localeCompare(String(b.title || ''));
+    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+  });
+}
+
+function visibleStyles() {
+  const filtered = allStyles.filter(style => {
+    const matchSearch = !searchQuery ||
+      style.title.toLowerCase().includes(searchQuery) ||
+      (style.description || '').toLowerCase().includes(searchQuery) ||
+      (style.prompt_preview || '').toLowerCase().includes(searchQuery) ||
+      (style.tags || []).some(t => t.toLowerCase().includes(searchQuery));
+    const matchFilter =
+      currentFilter === 'all' ||
+      (currentFilter === 'free' && !style.is_premium) ||
+      (currentFilter === 'premium' && style.is_premium);
+    return matchSearch && matchFilter;
+  });
+  return sortStyles(filtered);
+}
+
+async function hydratePromptCache(styles) {
+  const accessible = styles.filter(style => {
+    const userCan = (typeof isPremium === 'function' && isPremium())
+                  || (typeof isAdmin === 'function' && isAdmin())
+                  || !style.is_premium;
+    return userCan && !promptCache.has(style.id);
+  });
+  if (!accessible.length) return;
+
+  for (let i = 0; i < accessible.length; i += 80) {
+    const batch = accessible.slice(i, i + 80);
+    try {
+      const res = await fetch(`${API_URL}/api/prompts/batch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(await getAuthHeaders())
+        },
+        body: JSON.stringify({ style_ids: batch.map(style => style.id) })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Could not prefetch prompts');
+      Object.entries(data.prompts || {}).forEach(([id, prompt]) => promptCache.set(id, prompt || ''));
+      renderStyles();
+    } catch (err) {
+      console.warn('Prompt prefetch failed:', err);
+      return;
+    }
+  }
 }
 
 // ── Style Viewer Modal ────────────────────────────────────────
@@ -138,6 +231,7 @@ async function svOpen(id) {
   if (!overlay || !inner) return;
 
   const style = allStyles.find(s => s.id === id);
+  currentStyleId = id;
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
 
@@ -164,6 +258,10 @@ async function svOpen(id) {
   const cachedPrompt = promptCache.get(id) || '';
 
   try {
+    const activeStyles = visibleStyles();
+    const index = activeStyles.findIndex(s => s.id === id);
+    const canGoPrev = index > 0;
+    const canGoNext = index >= 0 && index < activeStyles.length - 1;
     inner.innerHTML = `
     <div class="sv-image-col">
       <img
@@ -176,6 +274,14 @@ async function svOpen(id) {
         ${style.is_premium
           ? '<span class="badge-premium"><i class="fa-solid fa-crown"></i> Premium</span>'
           : '<span class="badge-free">Free</span>'}
+      </div>
+      <div class="sv-nav-row">
+        <button class="btn btn-ghost btn-sm" onclick="svStep(-1)" ${canGoPrev ? '' : 'disabled'}>
+          <i class="fa-solid fa-chevron-left"></i> Previous
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="svStep(1)" ${canGoNext ? '' : 'disabled'}>
+          Next <i class="fa-solid fa-chevron-right"></i>
+        </button>
       </div>
     </div>
 
@@ -248,6 +354,15 @@ function svCopyPrompt() {
   if (text && !text.includes('Loading prompt')) copyToClipboard(text);
 }
 
+async function quickCopyPrompt(id) {
+  if (!promptCache.has(id)) {
+    await svOpen(id);
+    return;
+  }
+  const prompt = promptCache.get(id);
+  if (prompt) copyToClipboard(prompt);
+}
+
 async function svPrefetchPrompt(id) {
   const style = allStyles.find(s => s.id === id);
   if (!style || promptCache.has(id)) return;
@@ -285,10 +400,23 @@ async function svLoadPrompt(id) {
     }
   } catch (err) {
     if (promptEl) {
-      promptEl.textContent = err.message || 'Could not load prompt.';
+      promptEl.innerHTML = `
+        <div class="prompt-error">
+          <strong>Prompt could not load.</strong>
+          <span>${escapeHtml(err.message || 'Network error')}</span>
+          <button class="btn btn-outline btn-sm" onclick="svLoadPrompt('${id}')">Try again</button>
+        </div>`;
     }
     showToast(err.message || 'Could not load prompt.', 'error');
   }
+}
+
+function svStep(direction) {
+  if (!currentStyleId) return;
+  const styles = visibleStyles();
+  const index = styles.findIndex(style => style.id === currentStyleId);
+  const next = styles[index + direction];
+  if (next) svOpen(next.id);
 }
 
 function svClose() {

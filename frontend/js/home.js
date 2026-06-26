@@ -1,7 +1,16 @@
 // Home page — load and render categories
+let homeCategories = [];
+let categorySearch = '';
+
 document.addEventListener('DOMContentLoaded', async () => {
   await initAuth();
   await loadCategories();
+  await loadFeaturedStyles();
+
+  document.getElementById('categorySearch')?.addEventListener('input', e => {
+    categorySearch = e.target.value.toLowerCase();
+    renderCategories();
+  });
 
   // Show upgrade banner to non-premium users
   if (!isPremium()) {
@@ -34,14 +43,92 @@ async function loadCategories() {
     return;
   }
 
-  // Update stats
-  document.getElementById('statCategories').textContent = categories.length;
+  const counts = await Promise.all(categories.map(async cat => {
+    const { count } = await sb
+      .from('ad_styles')
+      .select('id', { count: 'exact', head: true })
+      .eq('category_id', cat.id)
+      .eq('is_active', true);
+    return { id: cat.id, count: count || 0 };
+  }));
+  const countsById = Object.fromEntries(counts.map(item => [item.id, item.count]));
+  homeCategories = categories.map(cat => ({ ...cat, style_count: countsById[cat.id] || 0 }));
 
-  grid.innerHTML = categories.map(cat => `
+  // Update stats
+  document.getElementById('statCategories').textContent = homeCategories.length;
+  document.getElementById('statStyles').textContent = `${homeCategories.reduce((sum, cat) => sum + cat.style_count, 0)}+`;
+
+  renderCategories();
+}
+
+function renderCategories() {
+  const grid = document.getElementById('categoriesGrid');
+  if (!grid) return;
+
+  const filtered = homeCategories.filter(cat =>
+    !categorySearch ||
+    cat.name.toLowerCase().includes(categorySearch) ||
+    (cat.description || '').toLowerCase().includes(categorySearch)
+  );
+
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <h3>No categories found</h3>
+      <p>Try a broader search term.</p>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(cat => `
     <a href="category.html?slug=${encodeURIComponent(cat.slug)}" class="category-card">
       <span class="category-icon">${escapeHtml(cat.icon || '🎨')}</span>
       <span class="category-name">${escapeHtml(cat.name)}</span>
       <span class="category-desc">${escapeHtml(cat.description || '')}</span>
+      <span class="category-count">${cat.style_count} styles</span>
     </a>
   `).join('');
+}
+
+async function loadFeaturedStyles() {
+  const grid = document.getElementById('featuredStylesGrid');
+  if (!grid) return;
+
+  const { data: styles, error } = await sb
+    .from('ad_styles')
+    .select('id, category_id, title, image_url, is_premium, prompt_preview, created_at')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(8);
+
+  if (error || !styles?.length) {
+    grid.innerHTML = '';
+    return;
+  }
+
+  const categoryIds = [...new Set(styles.map(style => style.category_id).filter(Boolean))];
+  const { data: categories } = await sb
+    .from('categories')
+    .select('id, slug, name')
+    .in('id', categoryIds);
+  const categoriesById = Object.fromEntries((categories || []).map(cat => [cat.id, cat]));
+
+  grid.innerHTML = styles.map(style => {
+    const cat = categoriesById[style.category_id] || {};
+    const seed = style.id.slice(0, 8);
+    return `
+      <a class="latest-card" href="category.html?slug=${encodeURIComponent(cat.slug || '')}">
+        <img
+          src="${escapeHtml(style.image_url)}"
+          alt="${escapeHtml(style.title)}"
+          loading="lazy"
+          onerror="this.onerror=null;this.src='https://picsum.photos/seed/${seed}/400/400'"
+        >
+        <div class="latest-card-body">
+          <span>${escapeHtml(cat.name || 'Category')}</span>
+          <strong>${escapeHtml(style.title)}</strong>
+          <p>${escapeHtml(style.prompt_preview || '')}</p>
+        </div>
+      </a>`;
+  }).join('');
 }
