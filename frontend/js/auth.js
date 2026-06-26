@@ -4,18 +4,21 @@
 
 let currentUser = null;
 let currentProfile = null;
+let currentAccess = { all_access: false, category_ids: [] };
 
 async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
     currentUser = session.user;
     currentProfile = await fetchProfile(currentUser.id);
+    currentAccess = await fetchAccessSummary();
   }
   renderNavAuth();
 
   sb.auth.onAuthStateChange(async (_event, session) => {
     currentUser = session?.user || null;
     currentProfile = currentUser ? await fetchProfile(currentUser.id) : null;
+    currentAccess = currentUser ? await fetchAccessSummary() : { all_access: false, category_ids: [] };
     renderNavAuth();
   });
 }
@@ -39,6 +42,7 @@ async function fetchProfile(userId) {
 function isPremium() {
   if (!currentProfile) return false;
   if (currentProfile.is_admin) return true; // admins always have full access
+  if (currentAccess?.all_access) return true;
   if (currentProfile.plan_type === 'premium') {
     if (!currentProfile.subscription_expires_at) return true;
     return new Date(currentProfile.subscription_expires_at) > new Date();
@@ -48,6 +52,33 @@ function isPremium() {
 
 function isAdmin() {
   return currentProfile?.is_admin === true;
+}
+
+async function fetchAccessSummary() {
+  try {
+    const res = await fetch(`${API_URL}/api/prompts/access`, {
+      headers: await getAuthHeaders()
+    });
+    if (!res.ok) return { all_access: false, category_ids: [] };
+    const data = await res.json();
+    return {
+      all_access: !!data.all_access,
+      category_ids: Array.isArray(data.category_ids) ? data.category_ids : []
+    };
+  } catch (e) {
+    console.warn('Access summary failed:', e);
+    return { all_access: false, category_ids: [] };
+  }
+}
+
+function hasCategoryAccess(categoryId) {
+  if (!categoryId) return false;
+  if (isPremium() || isAdmin()) return true;
+  return (currentAccess?.category_ids || []).includes(categoryId);
+}
+
+function canAccessStyle(style) {
+  return isAdmin() || isPremium() || !style?.is_premium || hasCategoryAccess(style?.category_id);
 }
 
 function renderNavAuth() {

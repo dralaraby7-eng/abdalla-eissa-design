@@ -6,6 +6,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from auth_utils import get_current_user, get_supabase
+from rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 
@@ -13,16 +14,17 @@ PAYMOB_API_KEY    = os.getenv("PAYMOB_API_KEY")
 INTEGRATION_ID    = int(os.getenv("PAYMOB_INTEGRATION_ID", "0"))
 IFRAME_ID         = os.getenv("PAYMOB_IFRAME_ID")
 HMAC_SECRET       = os.getenv("PAYMOB_HMAC_SECRET", "")
-PRICE_LIFETIME_EGP = int(os.getenv("PRICE_LIFETIME_EGP_CENTS", "25000"))   # 250 EGP
+PRICE_LIFETIME_EGP = int(os.getenv("PRICE_LIFETIME_EGP_CENTS", "25000"))   # 250 EGP, backwards compatible
+PRICE_ALL_ACCESS_EGP = int(os.getenv("PRICE_ALL_ACCESS_EGP_CENTS", str(PRICE_LIFETIME_EGP)))
+PRICE_CATEGORY_EGP = int(os.getenv("PRICE_CATEGORY_EGP_CENTS", "9900"))     # 99 EGP
 FRONTEND_URL      = os.getenv("FRONTEND_URL", "http://localhost:5500")
 
 PAYMOB_BASE = "https://accept.paymob.com/api"
 
 
 class OrderRequest(BaseModel):
-    user_id: str | None = None
-    email: str | None = None
-    billing: str = "lifetime_egp"   # "lifetime_egp" (250 EGP) | future: "lifetime_usd"
+    billing: str = "all_access_lifetime_egp"
+    category_slug: str | None = None
 
 
 def _require_paymob_config():
@@ -81,13 +83,39 @@ def _get_payment_key(auth_token: str, order_id: int, amount_cents: int, email: s
 
 @router.post("/create-order")
 async def create_order(body: OrderRequest, request: Request):
+    enforce_rate_limit(request, "payment-create", limit=10, window_seconds=60)
     _require_paymob_config()
     user = get_current_user(request)
     email = user.email
     if not email:
         raise HTTPException(status_code=400, detail="Authenticated user has no email")
 
-    amount = PRICE_LIFETIME_EGP   # always lifetime now
+    sb = get_supabase()
+    billing = body.billing or "all_access_lifetime_egp"
+    category_id = None
+    access_scope = "all"
+    if billing in {"lifetime_egp", "all_access_lifetime_egp", "all_access"}:
+        amount = PRICE_ALL_ACCESS_EGP
+    elif billing in {"category_lifetime_egp", "category"}:
+        if not body.category_slug:
+            raise HTTPException(status_code=400, detail="category_slug is required for category purchases")
+        cat_result = (
+            sb.table("categories")
+            .select("id, slug, is_active")
+            .eq("slug", body.category_slug)
+            .eq("is_active", True)
+            .limit(1)
+            .execute()
+        )
+        cat_rows = cat_result.data or []
+        if not cat_rows:
+            raise HTTPException(status_code=404, detail="Category not found")
+        category_id = cat_rows[0]["id"]
+        access_scope = "category"
+        amount = PRICE_CATEGORY_EGP
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported billing option")
+
     merchant_order_id = f"{user.id}-{uuid.uuid4().hex[:12]}"
     try:
         auth = _get_auth_token()
@@ -96,7 +124,7 @@ async def create_order(body: OrderRequest, request: Request):
     except requests.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Paymob error: {e}")
 
-    get_supabase().table("payment_orders").insert({
+    sb.table("payment_orders").insert({
         "user_id": user.id,
         "email": email,
         "paymob_order_id": str(order_id),
@@ -104,6 +132,9 @@ async def create_order(body: OrderRequest, request: Request):
         "amount_cents": amount,
         "currency": "EGP",
         "status": "pending",
+        "billing": billing,
+        "access_scope": access_scope,
+        "category_id": category_id,
     }).execute()
 
     payment_url = f"https://accept.paymob.com/api/acceptance/iframes/{IFRAME_ID}?payment_token={payment_key}"
@@ -165,20 +196,31 @@ async def payment_webhook(request: Request):
 
     amount = int(obj.get("amount_cents") or 0)
     integration_id = int(obj.get("integration_id") or 0)
+    if pending_order.get("status") == "paid":
+        return {"status": "ok", "already_paid": True}
+
     if (
-        pending_order.get("status") == "paid"
-        or amount != int(pending_order["amount_cents"])
+        amount != int(pending_order["amount_cents"])
         or obj.get("currency") != pending_order["currency"]
         or integration_id != INTEGRATION_ID
     ):
         raise HTTPException(status_code=400, detail="Payment verification failed")
 
-    # Grant lifetime premium (no expiry)
-    supabase.table("profiles").update({
-        "plan_type": "premium",
-        "subscription_expires_at": None,   # lifetime — never expires
-        "paymob_order_id": order_id
-    }).eq("id", pending_order["user_id"]).execute()
+    if pending_order.get("access_scope") == "category" and pending_order.get("category_id"):
+        supabase.table("user_category_access").upsert({
+            "user_id": pending_order["user_id"],
+            "category_id": pending_order["category_id"],
+            "source": "paymob",
+            "status": "active",
+            "expires_at": None,
+        }, on_conflict="user_id,category_id").execute()
+    else:
+        # Grant lifetime all access (legacy premium users remain supported).
+        supabase.table("profiles").update({
+            "plan_type": "premium",
+            "subscription_expires_at": None,
+            "paymob_order_id": order_id
+        }).eq("id", pending_order["user_id"]).execute()
 
     supabase.table("payment_orders").update({
         "status": "paid",

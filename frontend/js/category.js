@@ -5,6 +5,7 @@ let searchQuery = '';
 let currentSort = 'newest';
 let currentView = localStorage.getItem('styleViewMode') || 'grid';
 let currentStyleId = null;
+let currentCategorySlug = '';
 const promptCache = new Map();
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -62,6 +63,7 @@ async function loadCategory(slug) {
     .single();
 
   if (catErr || !cat) { window.location.href = 'index.html'; return; }
+  currentCategorySlug = cat.slug || slug;
 
   document.title = `${cat.name} | Abdalla Eissa for Design`;
   document.getElementById('breadcrumbCategory').textContent = cat.name;
@@ -71,7 +73,7 @@ async function loadCategory(slug) {
 
   const { data: styles, error: stylesErr } = await sb
     .from('ad_styles')
-    .select('id, title, image_url, tags, is_premium, description, view_count, created_at, prompt_preview')
+    .select('id, category_id, title, image_url, tags, is_premium, description, view_count, created_at, prompt_preview')
     .eq('category_id', cat.id)
     .eq('is_active', true)
     .order('created_at', { ascending: false });
@@ -126,7 +128,7 @@ function renderStyles() {
 
   grid.innerHTML = filtered.map(style => {
     const isPrem = style.is_premium;
-    const userHasAccess = isPremium() || !isPrem;
+    const userHasAccess = canAccessStyle(style);
     const seed = style.id.slice(0, 8);
     const promptReady = promptCache.has(style.id);
     const desc = style.description || style.prompt_preview || '';
@@ -194,9 +196,7 @@ function visibleStyles() {
 
 async function hydratePromptCache(styles) {
   const accessible = styles.filter(style => {
-    const userCan = (typeof isPremium === 'function' && isPremium())
-                  || (typeof isAdmin === 'function' && isAdmin())
-                  || !style.is_premium;
+    const userCan = (typeof canAccessStyle === 'function' && canAccessStyle(style));
     return userCan && !promptCache.has(style.id);
   });
   if (!accessible.length) return;
@@ -247,9 +247,7 @@ async function svOpen(id) {
     sb.rpc('increment_view_count', { style_id: id }).catch(() => {});
   } catch (e) { /* ignore */ }
 
-  const userCan = (typeof isPremium === 'function' && isPremium())
-                || (typeof isAdmin === 'function' && isAdmin())
-                || !style.is_premium;
+  const userCan = (typeof canAccessStyle === 'function' && canAccessStyle(style));
   const preview = style.prompt_preview || '';
   const hasMore = !!preview;
   const seed = id.slice(0, 8);
@@ -308,7 +306,7 @@ async function svOpen(id) {
           : `<div class="prompt-text blurred">${escapeHtml(preview)}${hasMore ? '…' : ''}</div>
              <div class="prompt-locked-overlay">
                <p><i class="fa-solid fa-lock"></i> Upgrade to access the full prompt</p>
-               <a href="pricing.html" class="btn btn-primary">
+               <a href="pricing.html?category_slug=${encodeURIComponent(currentCategorySlug)}" class="btn btn-primary">
                  <i class="fa-solid fa-crown"></i> Unlock with Premium
                </a>
                ${!loggedIn
@@ -366,9 +364,7 @@ async function quickCopyPrompt(id) {
 async function svPrefetchPrompt(id) {
   const style = allStyles.find(s => s.id === id);
   if (!style || promptCache.has(id)) return;
-  const userCan = (typeof isPremium === 'function' && isPremium())
-                || (typeof isAdmin === 'function' && isAdmin())
-                || !style.is_premium;
+  const userCan = (typeof canAccessStyle === 'function' && canAccessStyle(style));
   if (!userCan) return;
   try {
     await svFetchPrompt(id);

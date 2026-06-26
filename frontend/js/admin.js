@@ -2,6 +2,7 @@
 let adminCategories = [];
 let adminStyles = [];
 let adminUsers = [];
+let adminCategoryAccess = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
   await initAuth();
@@ -30,6 +31,7 @@ async function loadAdminData() {
   adminCategories = data.categories || [];
   adminStyles = data.styles || [];
   adminUsers = data.users || [];
+  adminCategoryAccess = data.category_access || [];
 
   const premiumCount = adminUsers.filter(u => u.plan_type === 'premium').length;
 
@@ -107,7 +109,7 @@ async function loadAdminData() {
       </h2>
       <div style="overflow-x:auto;border-radius:var(--radius-lg);border:1px solid var(--border);">
         <table class="admin-table">
-          <thead><tr><th>Name</th><th>Email</th><th>Plan</th><th>Joined</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Plan</th><th>Category Access</th><th>Joined</th><th>Actions</th></tr></thead>
           <tbody>${renderUsersTable()}</tbody>
         </table>
       </div>
@@ -132,7 +134,7 @@ async function adminFetchJson(path, options = {}) {
 }
 
 function renderUsersTable() {
-  if (!adminUsers.length) return '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No users yet</td></tr>';
+  if (!adminUsers.length) return '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No users yet</td></tr>';
   return adminUsers.map(u => {
     const isPrem = u.plan_type === 'premium';
     // Check if lifetime (no expiry) or expired
@@ -141,12 +143,23 @@ function renderUsersTable() {
     const planBadge = isPrem && !expired
       ? `<span class="badge-premium"><i class="fa-solid fa-crown"></i> Premium${hasExpiry ? '' : ' ∞'}</span>`
       : `<span class="badge-free">Free</span>`;
+    const activeAccess = adminCategoryAccess.filter(a => a.user_id === u.id && a.status === 'active');
+    const categoryBadges = activeAccess.length
+      ? activeAccess.map(a => `<span class="tag">${escapeHtml(a.categories?.name || 'Category')} <button onclick="adminRevokeCategory('${u.id}','${a.category_id}')" title="Revoke" style="border:0;background:transparent;color:inherit;cursor:pointer;">×</button></span>`).join('')
+      : '<span style="color:var(--text-muted);font-size:0.78rem;">None</span>';
 
     return `
       <tr>
         <td style="color:var(--text-primary);font-weight:600;">${escapeHtml(u.full_name || '—')}</td>
         <td style="font-size:0.8rem;color:var(--text-secondary);">${escapeHtml(u.email || '—')}</td>
         <td>${planBadge}</td>
+        <td>
+          <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-bottom:0.45rem;">${categoryBadges}</div>
+          <select class="form-input" style="max-width:180px;padding:0.35rem 0.5rem;font-size:0.78rem;" onchange="adminGrantCategory('${u.id}', this.value); this.value='';">
+            <option value="">Grant category...</option>
+            ${adminCategories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+          </select>
+        </td>
         <td style="font-size:0.8rem;">${new Date(u.created_at).toLocaleDateString()}</td>
         <td>
           <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
@@ -230,7 +243,8 @@ function editStyle(id) {
   document.getElementById('styleTitle').value = style.title;
   document.getElementById('styleDesc').value = style.description || '';
   document.getElementById('styleImageUrl').value = style.image_url;
-  document.getElementById('stylePrompt').value = style.meta_prompt || '';
+  document.getElementById('stylePrompt').value = style.normal_prompt || style.meta_prompt || '';
+  document.getElementById('styleJsonPrompt').value = style.json_prompt || '';
   document.getElementById('styleTags').value = (style.tags || []).join(', ');
   document.getElementById('styleIsPremium').checked = style.is_premium;
   document.getElementById('addStyleModal').classList.add('open');
@@ -249,7 +263,9 @@ async function handleSaveStyle(e) {
     title:        document.getElementById('styleTitle').value.trim(),
     description:  document.getElementById('styleDesc').value.trim() || null,
     image_url:    document.getElementById('styleImageUrl').value.trim(),
-    meta_prompt:  document.getElementById('stylePrompt').value.trim(),
+    normal_prompt: document.getElementById('stylePrompt').value.trim(),
+    json_prompt: document.getElementById('styleJsonPrompt').value.trim(),
+    meta_prompt: document.getElementById('stylePrompt').value.trim(),
     tags,
     is_premium: document.getElementById('styleIsPremium').checked,
     is_active: true
@@ -373,6 +389,40 @@ async function adminSetPremium(userId, action) {
     return null;
   } catch (err) {
     return err.message || 'Could not update premium access';
+  }
+}
+
+async function adminGrantCategory(userId, categoryId) {
+  if (!categoryId) return;
+  const error = await adminSetCategoryAccess(userId, categoryId, 'grant');
+  if (error) { showToast(error, 'error'); return; }
+  showToast('Category access granted.', 'success');
+  await loadAdminData();
+}
+
+async function adminRevokeCategory(userId, categoryId) {
+  if (!confirm('Revoke this category access for the user?')) return;
+  const error = await adminSetCategoryAccess(userId, categoryId, 'revoke');
+  if (error) { showToast(error, 'error'); return; }
+  showToast('Category access revoked.', 'success');
+  await loadAdminData();
+}
+
+async function adminSetCategoryAccess(userId, categoryId, action) {
+  try {
+    const res = await fetch(`${API_URL}/api/admin/set-category-access`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeaders())
+      },
+      body: JSON.stringify({ user_id: userId, category_id: categoryId, action })
+    });
+    const data = await res.json();
+    if (!res.ok) return data.detail || 'Could not update category access';
+    return null;
+  } catch (err) {
+    return err.message || 'Could not update category access';
   }
 }
 

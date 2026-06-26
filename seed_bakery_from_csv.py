@@ -109,10 +109,13 @@ def load_rows(path: Path) -> list[dict[str, str]]:
         sys.exit(f"CSV not found: {path}")
     with path.open(newline="", encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
-    required = {"id", "image", "meta_prompt", "category"}
+    required = {"id", "image", "category"}
     missing = required - set(rows[0].keys() if rows else [])
     if missing:
         sys.exit(f"CSV is missing required column(s): {', '.join(sorted(missing))}")
+    has_prompt = "meta_prompt" in rows[0] or "normal_prompt" in rows[0]
+    if not has_prompt:
+        sys.exit("CSV must include either meta_prompt or normal_prompt")
     return rows
 
 
@@ -142,15 +145,18 @@ def main() -> int:
 
     records = []
     for row in rows:
-        prompt = (row.get("meta_prompt") or "").strip()
+        prompt = (row.get("normal_prompt") or row.get("meta_prompt") or "").strip()
+        json_prompt = (row.get("json_prompt") or "").strip()
         image_path = (row.get("image") or "").strip()
         if not prompt or not image_path:
-            sys.exit(f"Invalid row {row.get('id')}: image and meta_prompt are required")
+            sys.exit(f"Invalid row {row.get('id')}: image and prompt are required")
         records.append(
             {
                 "title": title_from_row(row),
                 "image_url": build_image_url(image_path, supabase_url, args.bucket, args.image_base_url),
                 "meta_prompt": prompt,
+                "normal_prompt": prompt,
+                "json_prompt": json_prompt,
                 "description": description_from_prompt(prompt),
                 "tags": ["bakery", "ad style", "meta prompt"],
                 "is_premium": False,

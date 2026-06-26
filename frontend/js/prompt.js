@@ -43,7 +43,7 @@ async function loadStyle(id) {
   // Track view count (fire and forget)
   sb.rpc('increment_view_count', { style_id: id }).catch(() => {});
 
-  const userCan = isPremium() || isAdmin() || !style.is_premium;
+  const userCan = canAccessStyle(style);
   let promptText = '';
   if (userCan) {
     try {
@@ -52,7 +52,8 @@ async function loadStyle(id) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Could not load prompt');
-      promptText = data.prompt || '';
+      promptText = data.normal_prompt || data.prompt || '';
+      window.currentJsonPrompt = data.json_prompt || '';
     } catch (err) {
       showToast(err.message || 'Could not load prompt.', 'error');
     }
@@ -101,7 +102,11 @@ async function loadStyle(id) {
 
           ${userCan
             ? promptText
-              ? `<div class="prompt-text" id="promptText">${escapeHtml(promptText)}</div>
+              ? `<div class="prompt-tabs" style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">
+                   <button class="btn btn-sm btn-outline" onclick="showPromptTab('normal')">Normal</button>
+                   <button class="btn btn-sm btn-outline" onclick="showPromptTab('json')" ${window.currentJsonPrompt ? '' : 'disabled'}>JSON</button>
+                 </div>
+                 <div class="prompt-text" id="promptText" data-normal-prompt="${escapeHtml(promptText)}">${escapeHtml(promptText)}</div>
                  <button class="btn btn-primary btn-sm prompt-copy-btn" onclick="copyPromptText()">
                    <i class="fa-regular fa-copy"></i> Copy
                  </button>`
@@ -109,7 +114,7 @@ async function loadStyle(id) {
             : `<div class="prompt-text blurred" id="promptText">${escapeHtml(preview)}${hasMore ? '…' : ''}</div>
                <div class="prompt-locked-overlay">
                  <p><i class="fa-solid fa-lock"></i> Upgrade to access the full prompt</p>
-                 <a href="pricing.html" class="btn btn-primary">
+                 <a href="pricing.html${cat?.slug ? `?category_slug=${encodeURIComponent(cat.slug)}` : ''}" class="btn btn-primary">
                    <i class="fa-solid fa-crown"></i> Unlock with Premium
                  </a>
                  ${!currentUser ? `<a href="auth.html?tab=signup&back=${encodeURIComponent(window.location.href)}" class="btn btn-outline btn-sm">Sign up free to preview</a>` : ''}
@@ -130,7 +135,7 @@ async function loadStyle(id) {
         </div>
 
         ${!userCan ? `<div style="margin-top:1.5rem;">
-          <a href="pricing.html" class="btn btn-primary" style="width:100%;justify-content:center;">
+          <a href="pricing.html${cat?.slug ? `?category_slug=${encodeURIComponent(cat.slug)}` : ''}" class="btn btn-primary" style="width:100%;justify-content:center;">
             <i class="fa-solid fa-crown"></i> Get Premium — Full Access
           </a>
         </div>` : ''}
@@ -149,4 +154,14 @@ async function loadStyle(id) {
 function copyPromptText() {
   const text = document.getElementById('promptText')?.textContent;
   if (text) copyToClipboard(text);
+}
+
+function showPromptTab(tab) {
+  const el = document.getElementById('promptText');
+  if (!el) return;
+  if (tab === 'json' && window.currentJsonPrompt) {
+    el.textContent = window.currentJsonPrompt;
+  } else {
+    el.textContent = el.dataset.normalPrompt || el.textContent;
+  }
 }

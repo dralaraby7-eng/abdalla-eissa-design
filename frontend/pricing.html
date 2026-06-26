@@ -181,6 +181,13 @@
     await initAuth();
     document.getElementById('hamburger')?.addEventListener('click', () =>
       document.getElementById('mobileNav')?.classList.toggle('open'));
+    const categorySlug = getParam('category_slug');
+    if (categorySlug) {
+      const btn = document.getElementById('upgradeBtnEGP');
+      if (btn) btn.innerHTML = '<span>🇪🇬</span> Pay 99 EGP — Unlock This Category';
+      const hero = document.querySelector('.hero p');
+      if (hero) hero.textContent = `Unlock the ${categorySlug.replace(/-/g, ' ')} category only. You can upgrade to All Access later.`;
+    }
   });
 
   async function handleUpgradeEGP() {
@@ -188,7 +195,8 @@
       window.location.href = 'auth.html?tab=signup&back=' + encodeURIComponent(window.location.href);
       return;
     }
-    if (isPremium()) {
+    const categorySlug = getParam('category_slug');
+    if (!categorySlug && isPremium()) {
       showToast('You already have Premium! Enjoy lifetime access.', 'success');
       return;
     }
@@ -204,7 +212,8 @@
           ...(await getAuthHeaders())
         },
         body: JSON.stringify({
-          billing: 'lifetime_egp'
+          billing: categorySlug ? 'category_lifetime_egp' : 'all_access_lifetime_egp',
+          category_slug: categorySlug
         })
       });
       const data = await res.json();
@@ -216,7 +225,9 @@
     } catch (err) {
       showToast(err.message || 'Could not connect to payment server.', 'error');
       btn.disabled = false;
-      btn.innerHTML = '<span>🇪🇬</span> Pay 250 EGP — Unlock Forever';
+      btn.innerHTML = categorySlug
+        ? '<span>🇪🇬</span> Pay 99 EGP — Unlock This Category'
+        : '<span>🇪🇬</span> Pay 250 EGP — Unlock Forever';
     }
   }
 </script>

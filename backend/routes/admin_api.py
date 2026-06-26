@@ -43,15 +43,28 @@ class StyleBody(BaseModel):
     title: str
     description: Optional[str] = None
     image_url: str
-    meta_prompt: str
+    meta_prompt: Optional[str] = None
+    normal_prompt: Optional[str] = None
+    json_prompt: Optional[str] = None
     tags: list[str] = []
     is_premium: bool = False
     is_active: bool = True
 
 
+class SetCategoryAccessBody(BaseModel):
+    user_id: str
+    category_id: str
+    action: str  # "grant" or "revoke"
+
+
 def _style_payload(body: StyleBody) -> dict:
     data = body.model_dump()
-    data["prompt_preview"] = body.meta_prompt[:140]
+    normal_prompt = (body.normal_prompt or body.meta_prompt or "").strip()
+    json_prompt = (body.json_prompt or "").strip()
+    data["normal_prompt"] = normal_prompt
+    data["json_prompt"] = json_prompt
+    data["meta_prompt"] = normal_prompt
+    data["prompt_preview"] = normal_prompt[:140]
     return data
 
 
@@ -69,10 +82,17 @@ async def admin_catalog(request: Request):
         .execute()
     )
     profiles = sb.table("profiles").select("*").order("created_at", desc=True).execute()
+    access = (
+        sb.table("user_category_access")
+        .select("user_id, category_id, status, expires_at, categories(name, slug)")
+        .order("created_at", desc=True)
+        .execute()
+    )
     return {
         "categories": categories.data or [],
         "styles": styles.data or [],
         "users": profiles.data or [],
+        "category_access": access.data or [],
     }
 
 
@@ -172,4 +192,28 @@ async def set_premium(body: SetPremiumBody, request: Request):
         raise HTTPException(status_code=400, detail="action must be 'grant' or 'revoke'")
 
     result = sb.table("profiles").update(data).eq("id", body.user_id).execute()
+    return {"success": True}
+
+
+@router.post("/set-category-access")
+async def set_category_access(body: SetCategoryAccessBody, request: Request):
+    """Grant or revoke lifetime access to a single category."""
+    _verify_admin(request)
+    sb = _get_supabase()
+
+    if body.action == "grant":
+        sb.table("user_category_access").upsert({
+            "user_id": body.user_id,
+            "category_id": body.category_id,
+            "source": "admin",
+            "status": "active",
+            "expires_at": None,
+        }, on_conflict="user_id,category_id").execute()
+    elif body.action == "revoke":
+        sb.table("user_category_access").update({
+            "status": "revoked",
+        }).eq("user_id", body.user_id).eq("category_id", body.category_id).execute()
+    else:
+        raise HTTPException(status_code=400, detail="action must be 'grant' or 'revoke'")
+
     return {"success": True}

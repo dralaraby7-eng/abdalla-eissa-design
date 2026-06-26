@@ -27,6 +27,7 @@ allowed_origins = [o.strip() for o in _origins_raw.split(",") if o.strip()]
 frontend_url = os.getenv("FRONTEND_URL", "").strip()
 if frontend_url and frontend_url not in allowed_origins:
     allowed_origins.append(frontend_url)
+allow_vercel_previews = os.getenv("ALLOW_VERCEL_PREVIEWS", "").lower() in {"1", "true", "yes"}
 
 app = FastAPI(
     title="Abdalla Eissa for Design API",
@@ -37,7 +38,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"^https://[a-z0-9-]+\.vercel\.app$",
+    allow_origin_regex=r"^https://[a-z0-9-]+\.vercel\.app$" if allow_vercel_previews else None,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],

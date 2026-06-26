@@ -53,6 +53,8 @@ App 1/
 
 1. Go to [supabase.com](https://supabase.com) → New project
 2. Open **SQL Editor** → paste contents of `supabase/schema.sql` → Run
+   - This schema is security-first: browser clients can only read public prompt previews, while full prompts are returned by the FastAPI backend after access checks.
+   - If you already created the database from an older version, run `supabase/fix_rls.sql`, `supabase/fix_missing_profiles.sql`, then `supabase/security_hardening.sql`.
 3. Go to **Project Settings → API** → copy your:
    - `Project URL`
    - `anon public` key  
@@ -147,16 +149,18 @@ Or drag the `frontend/` folder to [vercel.com](https://vercel.com).
 
 ---
 
-## Free vs Premium
+## Access Model
 
-| Feature | Free | Premium |
+| Feature | Free | Category Pack | All Access |
 |---|---|---|
-| Browse categories | ✅ | ✅ |
-| View style images | ✅ | ✅ |
-| Prompt preview (140 chars) | ✅ | ✅ |
-| Copy full prompt | ❌ | ✅ |
-| Premium-only styles | ❌ | ✅ |
-| New styles weekly | ❌ | ✅ |
+| Browse categories | ✅ | ✅ | ✅ |
+| View style images | ✅ | ✅ | ✅ |
+| Prompt preview (140 chars) | ✅ | ✅ | ✅ |
+| Copy full prompts in selected category | ❌ | ✅ | ✅ |
+| Copy full prompts in all categories | ❌ | ❌ | ✅ |
+| Premium-only styles | ❌ | Selected category | All categories |
+
+Backend access checks are enforced in `/api/prompts/*`. The frontend lock UI is only a visual hint; it is not the security boundary.
 
 ---
 
