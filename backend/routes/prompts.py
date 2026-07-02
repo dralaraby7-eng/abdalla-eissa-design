@@ -156,6 +156,34 @@ async def get_access_summary(request: Request):
     }
 
 
+@router.get("/categories/{category_slug}/catalog")
+def get_category_catalog(category_slug: str, request: Request):
+    """Return public category metadata without exposing full prompt text."""
+    enforce_rate_limit(request, "category-catalog", limit=120, window_seconds=60)
+    sb = get_supabase()
+    category_result = (
+        sb.table("categories")
+        .select("id, name, slug, icon, description")
+        .eq("slug", category_slug)
+        .eq("is_active", True)
+        .limit(1)
+        .execute()
+    )
+    categories = category_result.data or []
+    if not categories:
+        raise HTTPException(status_code=404, detail="Category not found")
+    category = categories[0]
+    styles_result = (
+        sb.table("ad_styles")
+        .select("id, category_id, title, image_url, tags, is_premium, description, view_count, created_at, prompt_preview")
+        .eq("category_id", category["id"])
+        .eq("is_active", True)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return {"category": category, "styles": styles_result.data or []}
+
+
 @router.get("/categories/{category_slug}/download")
 def download_category(category_slug: str, request: Request):
     """Build one offline ZIP containing the category images and prompt catalog."""

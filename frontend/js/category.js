@@ -56,14 +56,40 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadCategory(slug) {
-  const { data: cat, error: catErr } = await sb
-    .from('categories')
-    .select('*')
-    .eq('slug', slug)
-    .eq('is_active', true)
-    .single();
+  currentCategorySlug = slug;
+  const grid = document.getElementById('stylesGrid');
+  const downloadButton = document.getElementById('downloadCategoryBtn');
+  if (downloadButton) {
+    downloadButton.disabled = true;
+    downloadButton.innerHTML = '<span class="spinner"></span> <span>Loading category...</span>';
+  }
 
-  if (catErr || !cat) { window.location.href = 'index.html'; return; }
+  let catalog;
+  try {
+    catalog = await Promise.any([
+      withTimeout(fetchCatalogFromApi(slug), 30000),
+      withTimeout(fetchCatalogFromSupabase(slug), 20000)
+    ]);
+  } catch (error) {
+    if (grid) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <h3>Category could not load</h3>
+        <p>Check your connection, then try again.</p>
+        <button class="btn btn-primary" type="button" onclick="loadCategory(currentCategorySlug)">
+          <i class="fa-solid fa-rotate-right"></i> Try again
+        </button>
+      </div>`;
+    }
+    if (downloadButton) {
+      downloadButton.innerHTML = '<i class="fa-solid fa-file-arrow-down"></i> <span>Download unavailable</span>';
+    }
+    showToast('Could not load this category. Please try again.', 'error');
+    return;
+  }
+
+  const cat = catalog.category;
+  const styles = catalog.styles;
   currentCategorySlug = cat.slug || slug;
   currentCategoryName = cat.name || 'Category';
 
@@ -73,14 +99,7 @@ async function loadCategory(slug) {
   document.getElementById('catName').textContent = cat.name;
   document.getElementById('catDesc').textContent = cat.description || '';
 
-  const { data: styles, error: stylesErr } = await sb
-    .from('ad_styles')
-    .select('id, category_id, title, image_url, tags, is_premium, description, view_count, created_at, prompt_preview')
-    .eq('category_id', cat.id)
-    .eq('is_active', true)
-    .order('created_at', { ascending: false });
-
-  if (stylesErr || !styles) {
+  if (!Array.isArray(styles)) {
     document.getElementById('stylesGrid').innerHTML = `<div class="empty-state" style="grid-column:1/-1">
       <i class="fa-solid fa-image"></i><h3>No styles yet</h3><p>New styles will be added soon.</p>
     </div>`;
@@ -96,6 +115,41 @@ async function loadCategory(slug) {
   if (!isPremium() && hasPremium) {
     document.getElementById('upgradeBanner').style.display = 'block';
   }
+}
+
+function withTimeout(promise, milliseconds) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), milliseconds))
+  ]);
+}
+
+async function fetchCatalogFromApi(slug) {
+  const response = await fetch(`${API_URL}/api/prompts/categories/${encodeURIComponent(slug)}/catalog`);
+  const data = await response.json();
+  if (!response.ok || !data.category || !Array.isArray(data.styles)) {
+    throw new Error(data.detail || 'Catalog API failed');
+  }
+  return data;
+}
+
+async function fetchCatalogFromSupabase(slug) {
+  const { data: category, error: categoryError } = await sb
+    .from('categories')
+    .select('id, name, slug, icon, description')
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .single();
+  if (categoryError || !category) throw categoryError || new Error('Category not found');
+
+  const { data: styles, error: stylesError } = await sb
+    .from('ad_styles')
+    .select('id, category_id, title, image_url, tags, is_premium, description, view_count, created_at, prompt_preview')
+    .eq('category_id', category.id)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
+  if (stylesError || !styles) throw stylesError || new Error('Styles could not load');
+  return { category, styles };
 }
 
 function configureCategoryDownload() {
