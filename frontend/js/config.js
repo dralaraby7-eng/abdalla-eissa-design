@@ -6,11 +6,10 @@
 const SUPABASE_URL  = 'https://ukjwbcrbnutxemwsebsc.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrandiY3JibnV0eGVtd3NlYnNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMzY0NDIsImV4cCI6MjA5NDcxMjQ0Mn0.hV7H2PVyPyfo_1ciiq5TddUFwJRx0Xna5isv2r5gEQc';
 
-// FastAPI backend. Production uses the same-origin /api Vercel proxy so
-// browsers never depend on cross-origin CORS configuration.
+// FastAPI backend. Render explicitly allows the production Vercel origin.
 const API_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
   ? 'http://localhost:8000'
-  : '';
+  : 'https://abdalla-eissa-design.onrender.com';
 
 // Free tier: how many characters of the prompt to show before blur
 const FREE_PREVIEW_CHARS = 140;

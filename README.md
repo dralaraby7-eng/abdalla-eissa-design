@@ -67,7 +67,7 @@ Edit `frontend/js/config.js`:
 ```js
 const SUPABASE_URL  = 'https://YOUR_PROJECT_ID.supabase.co';
 const SUPABASE_ANON = 'YOUR_ANON_PUBLIC_KEY';
-// Production API calls use the same-origin Vercel /api rewrite.
+const API_URL       = 'https://your-backend.onrender.com';  // or localhost:8000
 ```
 
 ### 3. Backend
@@ -169,9 +169,9 @@ category page. It contains the source images, `prompts.csv`, an offline visual
 `catalog.html`, and a short `README.txt`. Image downloads are restricted to the
 configured Supabase host plus optional `IMAGE_DOWNLOAD_HOSTS` entries.
 
-In production, browser API requests use Vercel's same-origin `/api` rewrite to
-the Render service. This avoids cross-origin prompt failures while Render still
-keeps an explicit CORS allowlist for direct API clients.
+In production, Render must include the exact Vercel site URL in its CORS
+allowlist. The application also includes the canonical production URL as a
+fallback so prompt requests are not broken by a stale Render environment value.
 
 ---
 
