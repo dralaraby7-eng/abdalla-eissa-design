@@ -525,6 +525,7 @@ input, textarea, select { font-family: inherit; outline: none; border: none; }
   color: var(--white);
 }
 .gallery-title-row p { color: var(--text-secondary); font-size: 0.9rem; }
+.category-download-btn { margin-left: auto; }
 
 .gallery-filters {
   display: flex;
@@ -1725,4 +1726,5 @@ textarea.form-input { resize: vertical; min-height: 120px; }
   .sv-image-col { padding: 1rem; }
   .sv-content-col { padding: 1rem; }
   .sv-modal { border-radius: var(--radius-lg); }
+  .category-download-btn { width: 100%; margin-left: 0; justify-content: center; }
 }

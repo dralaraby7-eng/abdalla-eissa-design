@@ -67,7 +67,7 @@ Edit `frontend/js/config.js`:
 ```js
 const SUPABASE_URL  = 'https://YOUR_PROJECT_ID.supabase.co';
 const SUPABASE_ANON = 'YOUR_ANON_PUBLIC_KEY';
-const API_URL       = 'https://your-backend.onrender.com';  // or localhost:8000
+// Production API calls use the same-origin Vercel /api rewrite.
 ```
 
 ### 3. Backend
@@ -161,6 +161,17 @@ Or drag the `frontend/` folder to [vercel.com](https://vercel.com).
 | Premium-only styles | ❌ | Selected category | All categories |
 
 Backend access checks are enforced in `/api/prompts/*`. The frontend lock UI is only a visual hint; it is not the security boundary.
+
+### Category Delivery Pack
+
+Users with access to every style in a category can download one ZIP from the
+category page. It contains the source images, `prompts.csv`, an offline visual
+`catalog.html`, and a short `README.txt`. Image downloads are restricted to the
+configured Supabase host plus optional `IMAGE_DOWNLOAD_HOSTS` entries.
+
+In production, browser API requests use Vercel's same-origin `/api` rewrite to
+the Render service. This avoids cross-origin prompt failures while Render still
+keeps an explicit CORS allowlist for direct API clients.
 
 ---
 

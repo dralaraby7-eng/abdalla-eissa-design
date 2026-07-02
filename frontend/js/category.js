@@ -6,6 +6,7 @@ let currentSort = 'newest';
 let currentView = localStorage.getItem('styleViewMode') || 'grid';
 let currentStyleId = null;
 let currentCategorySlug = '';
+let currentCategoryName = '';
 const promptCache = new Map();
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -64,6 +65,7 @@ async function loadCategory(slug) {
 
   if (catErr || !cat) { window.location.href = 'index.html'; return; }
   currentCategorySlug = cat.slug || slug;
+  currentCategoryName = cat.name || 'Category';
 
   document.title = `${cat.name} | Abdalla Eissa for Design`;
   document.getElementById('breadcrumbCategory').textContent = cat.name;
@@ -86,12 +88,72 @@ async function loadCategory(slug) {
   }
 
   allStyles = styles;
+  configureCategoryDownload();
   renderStyles();
   hydratePromptCache(styles);
 
   const hasPremium = styles.some(s => s.is_premium);
   if (!isPremium() && hasPremium) {
     document.getElementById('upgradeBanner').style.display = 'block';
+  }
+}
+
+function configureCategoryDownload() {
+  const button = document.getElementById('downloadCategoryBtn');
+  if (!button) return;
+  const locked = allStyles.some(style => !canAccessStyle(style));
+  button.disabled = false;
+  button.dataset.locked = locked ? 'true' : 'false';
+  button.title = locked
+    ? 'Unlock this category to download the complete pack'
+    : `Download all ${currentCategoryName} images and prompts`;
+  button.innerHTML = locked
+    ? '<i class="fa-solid fa-lock"></i> <span>Unlock Category Pack</span>'
+    : '<i class="fa-solid fa-file-arrow-down"></i> <span>Download Category Pack</span>';
+  button.onclick = downloadCategoryPackage;
+}
+
+async function downloadCategoryPackage() {
+  const button = document.getElementById('downloadCategoryBtn');
+  if (!button || button.disabled) return;
+  if (button.dataset.locked === 'true') {
+    window.location.href = `pricing.html?category_slug=${encodeURIComponent(currentCategorySlug)}`;
+    return;
+  }
+
+  const originalHtml = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = '<span class="spinner"></span> <span>Building your pack...</span>';
+  try {
+    const response = await fetch(`${API_URL}/api/prompts/categories/${encodeURIComponent(currentCategorySlug)}/download`, {
+      headers: await getAuthHeaders()
+    });
+    if (!response.ok) {
+      let message = 'Could not build the category pack';
+      try {
+        const data = await response.json();
+        message = data.detail || message;
+      } catch (e) { /* non-JSON server error */ }
+      throw new Error(message);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    const filename = match?.[1] || `${currentCategorySlug}-prompt-pack.zip`;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('Category pack downloaded successfully.', 'success');
+  } catch (error) {
+    showToast(error.message || 'Could not download the category pack.', 'error');
+  } finally {
+    button.disabled = false;
+    button.innerHTML = originalHtml;
   }
 }
 

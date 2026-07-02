@@ -25,8 +25,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 _origins_raw = os.getenv("ALLOWED_ORIGINS", "http://localhost:5500")
 allowed_origins = [o.strip() for o in _origins_raw.split(",") if o.strip()]
 frontend_url = os.getenv("FRONTEND_URL", "").strip()
-if frontend_url and frontend_url not in allowed_origins:
-    allowed_origins.append(frontend_url)
+for origin in (frontend_url, "https://abdalla-eissa-design.vercel.app"):
+    if origin and origin not in allowed_origins:
+        allowed_origins.append(origin)
 allow_vercel_previews = os.getenv("ALLOW_VERCEL_PREVIEWS", "").lower() in {"1", "true", "yes"}
 
 app = FastAPI(
