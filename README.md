@@ -163,6 +163,14 @@ Or drag the `frontend/` folder to [vercel.com](https://vercel.com).
 
 Backend access checks are enforced in `/api/prompts/*`. The frontend lock UI is only a visual hint; it is not the security boundary.
 
+### Password Security
+
+New registrations require at least 10 characters including uppercase,
+lowercase, a number, and a symbol. Supabase's HaveIBeenPwned leaked-password
+check is a Pro-plan feature and cannot be enabled while the project organization
+uses the Free plan. After upgrading, enable it in the project's Auth password
+settings and confirm the `auth_leaked_password_protection` advisor warning clears.
+
 ### Category Delivery Pack
 
 Users with access to a category can download either a selectable-text PDF or a

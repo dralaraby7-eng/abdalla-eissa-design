@@ -5,32 +5,94 @@
 let currentUser = null;
 let currentProfile = null;
 let currentAccess = { all_access: false, category_ids: [], categories: [] };
+let authContextVersion = 0;
 
-async function initAuth() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    currentUser = session.user;
-    currentProfile = await fetchProfile(currentUser.id);
-    currentAccess = await fetchAccessSummary();
+const AUTH_REQUEST_TIMEOUT_MS = 12000;
+
+function emptyAccess() {
+  return { all_access: false, category_ids: [], categories: [] };
+}
+
+function withTimeout(promise, label, timeoutMs = AUTH_REQUEST_TIMEOUT_MS) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out. Please try again.`)), timeoutMs);
+  });
+  return Promise.race([Promise.resolve(promise), timeout]).finally(() => clearTimeout(timer));
+}
+
+function applySession(session) {
+  const nextUser = session?.user || null;
+  const changedUser = currentUser?.id !== nextUser?.id;
+  currentUser = nextUser;
+  if (changedUser) {
+    currentProfile = null;
+    currentAccess = emptyAccess();
+  }
+  if (!currentUser) {
+    currentProfile = null;
+    currentAccess = emptyAccess();
   }
   renderNavAuth();
+}
 
-  sb.auth.onAuthStateChange(async (_event, session) => {
-    currentUser = session?.user || null;
-    currentProfile = currentUser ? await fetchProfile(currentUser.id) : null;
-    currentAccess = currentUser ? await fetchAccessSummary() : { all_access: false, category_ids: [], categories: [] };
-    renderNavAuth();
+async function refreshAuthContext(user) {
+  if (!user?.id) return;
+  const version = ++authContextVersion;
+  const [profileResult, accessResult] = await Promise.allSettled([
+    fetchProfile(user.id),
+    fetchAccessSummary()
+  ]);
+  if (version !== authContextVersion || currentUser?.id !== user.id) return;
+  currentProfile = profileResult.status === 'fulfilled' ? profileResult.value : null;
+  currentAccess = accessResult.status === 'fulfilled' ? accessResult.value : emptyAccess();
+  if (profileResult.status === 'rejected') console.warn('Profile loading failed:', profileResult.reason);
+  if (accessResult.status === 'rejected') console.warn('Access loading failed:', accessResult.reason);
+  renderNavAuth();
+  document.dispatchEvent(new CustomEvent('authcontextchange'));
+}
+
+async function initAuth() {
+  try {
+    const { data: { session } } = await withTimeout(sb.auth.getSession(), 'Session loading');
+    applySession(session);
+    if (session?.user) await refreshAuthContext(session.user);
+  } catch (error) {
+    console.warn('Session loading failed:', error);
+    applySession(null);
+  }
+
+  sb.auth.onAuthStateChange((_event, session) => {
+    // Supabase can deadlock when another async Supabase call is awaited inside
+    // this callback. Apply the session synchronously, then load context later.
+    applySession(session);
+    const user = session?.user;
+    if (user) {
+      setTimeout(() => refreshAuthContext(user).catch(error => {
+        console.warn('Auth context refresh failed:', error);
+      }), 0);
+    }
   });
 }
 
 async function fetchProfile(userId) {
-  let { data } = await sb.from('profiles').select('*').eq('id', userId).single();
+  const first = await withTimeout(
+    sb.from('profiles').select('*').eq('id', userId).maybeSingle(),
+    'Profile loading'
+  );
+  if (first.error) throw first.error;
+  let data = first.data;
   if (!data) {
     // Profile row missing — the signup trigger may have never fired.
     // Call the self-heal RPC to create it now, then re-read.
     try {
-      await sb.rpc('ensure_profile');
-      const retry = await sb.from('profiles').select('*').eq('id', userId).single();
+      const repair = await withTimeout(sb.rpc('ensure_profile'), 'Profile repair');
+      if (repair.error) throw repair.error;
+      const retry = await withTimeout(
+        sb.from('profiles').select('*').eq('id', userId).maybeSingle(),
+        'Profile reload'
+      );
+      if (retry.error) throw retry.error;
       data = retry.data;
     } catch (e) {
       console.warn('ensure_profile RPC failed:', e);
@@ -55,9 +117,12 @@ function isAdmin() {
 }
 
 async function fetchAccessSummary() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(`${API_URL}/api/prompts/access`, {
-      headers: await getAuthHeaders()
+      headers: await getAuthHeaders(),
+      signal: controller.signal
     });
     if (!res.ok) return { all_access: false, category_ids: [], categories: [] };
     const data = await res.json();
@@ -68,7 +133,9 @@ async function fetchAccessSummary() {
     };
   } catch (e) {
     console.warn('Access summary failed:', e);
-    return { all_access: false, category_ids: [], categories: [] };
+    return emptyAccess();
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -85,6 +152,10 @@ function canAccessStyle(style) {
 function renderNavAuth() {
   const actionsEl = document.getElementById('navActions');
   const mobileActionsEl = document.getElementById('navMobileActions');
+  document.querySelectorAll('.nav-links a[href^="auth.html"]').forEach(link => {
+    link.href = currentUser ? 'dashboard.html' : 'auth.html?tab=login';
+    link.textContent = currentUser ? 'Dashboard' : 'Log In';
+  });
   if (!actionsEl) return;
 
   if (currentUser) {
@@ -122,7 +193,11 @@ async function signOut() {
 }
 
 async function signIn(email, password) {
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  const { data, error } = await withTimeout(
+    sb.auth.signInWithPassword({ email, password }),
+    'Login',
+    20000
+  );
   if (error) throw error;
   return data;
 }

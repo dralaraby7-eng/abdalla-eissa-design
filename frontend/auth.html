@@ -104,8 +104,9 @@
         <label class="form-label">Password</label>
         <div class="form-input-icon">
           <i class="fa-solid fa-lock"></i>
-          <input type="password" class="form-input" id="signupPassword" placeholder="Minimum 8 characters" required minlength="8" autocomplete="new-password">
+          <input type="password" class="form-input" id="signupPassword" placeholder="10+ characters with upper, lower, number & symbol" required minlength="10" autocomplete="new-password">
         </div>
+        <div class="form-error" id="passwordStrengthError">Use at least 10 characters with uppercase, lowercase, a number, and a symbol.</div>
       </div>
       <div class="form-group">
         <label class="form-label">Confirm Password</label>
@@ -137,12 +138,12 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js?v=15"></script>
-<script src="js/auth.js?v=15"></script>
+<script src="js/auth.js?v=16"></script>
 <script>
   // Sanitize the ?back= param to prevent open-redirect attacks:
   // only allow same-origin relative paths.
   const backUrl = (() => {
-    const raw = getParam('back') || 'index.html';
+    const raw = getParam('back') || 'dashboard.html';
     try {
       const url = new URL(raw, window.location.origin);
       if (url.origin !== window.location.origin) return 'index.html';
@@ -154,8 +155,12 @@
   let lastLoginEmail = '';
 
   document.addEventListener('DOMContentLoaded', async () => {
-    const { data: { session } } = await sb.auth.getSession();
-    if (session) { window.location.href = backUrl; return; }
+    try {
+      const { data: { session } } = await withTimeout(sb.auth.getSession(), 'Session loading');
+      if (session) { window.location.replace(backUrl); return; }
+    } catch (error) {
+      console.warn('Existing session check failed:', error);
+    }
     showTab(getParam('tab') || 'login');
   });
 
@@ -178,7 +183,7 @@
     setLoading('login', true);
     try {
       await signIn(email, document.getElementById('loginPassword').value);
-      window.location.href = backUrl;
+      window.location.replace(backUrl);
     } catch (err) {
       const msg = (err.message || '').toLowerCase();
       if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
@@ -200,6 +205,12 @@
     hideAlerts();
     const pass = document.getElementById('signupPassword').value;
     const confirm = document.getElementById('signupConfirm').value;
+    const strengthError = document.getElementById('passwordStrengthError');
+    if (!isStrongPassword(pass)) {
+      strengthError.classList.add('visible');
+      return;
+    }
+    strengthError.classList.remove('visible');
     if (pass !== confirm) {
       document.getElementById('confirmError').classList.add('visible');
       return;
@@ -233,6 +244,14 @@
     } finally {
       setLoading('signup', false);
     }
+  }
+
+  function isStrongPassword(password) {
+    return password.length >= 10 &&
+      /[a-z]/.test(password) &&
+      /[A-Z]/.test(password) &&
+      /\d/.test(password) &&
+      /[^A-Za-z0-9]/.test(password);
   }
 
   async function resendConfirmation() {
