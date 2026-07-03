@@ -38,8 +38,53 @@ function showToast(message, type = 'info') {
   setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(20px)'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 3500);
 }
 
-function copyToClipboard(text) {
-  navigator.clipboard.writeText(text).then(() => showToast('Prompt copied to clipboard!', 'success'));
+async function copyToClipboard(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const field = document.createElement('textarea');
+      field.value = text;
+      field.setAttribute('readonly', '');
+      field.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+      document.body.appendChild(field);
+      field.select();
+      if (!document.execCommand('copy')) throw new Error('Copy command failed');
+      field.remove();
+    }
+    showToast('Meta prompt copied!', 'success');
+    return true;
+  } catch (error) {
+    showToast('Copy failed. Select the prompt and copy it manually.', 'error');
+    return false;
+  }
+}
+
+function downloadJsonPromptFile(title, jsonText) {
+  if (!jsonText) {
+    showToast('No JSON prompt is available for this style.', 'error');
+    return false;
+  }
+  let normalized;
+  try {
+    normalized = JSON.stringify(JSON.parse(jsonText), null, 2);
+  } catch (error) {
+    showToast('This JSON prompt is invalid. Please contact support.', 'error');
+    return false;
+  }
+  const safeTitle = String(title || 'prompt').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'prompt';
+  const blob = new Blob([normalized + '\n'], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${safeTitle}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast('JSON prompt downloaded.', 'success');
+  return true;
 }
 
 function escapeHtml(str) {

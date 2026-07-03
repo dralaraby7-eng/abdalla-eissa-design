@@ -7,6 +7,9 @@ let currentView = localStorage.getItem('styleViewMode') || 'grid';
 let currentStyleId = null;
 let currentCategorySlug = '';
 let currentCategoryName = '';
+let currentCatalogHasAccess = false;
+let currentCatalogIsTeaser = true;
+let currentTotalStyles = 0;
 const promptCache = new Map();
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -59,18 +62,20 @@ async function loadCategory(slug) {
   currentCategorySlug = slug;
   const grid = document.getElementById('stylesGrid');
   const downloadButton = document.getElementById('downloadCategoryBtn');
+  const htmlDownloadButton = document.getElementById('downloadHtmlBtn');
   if (downloadButton) {
     downloadButton.disabled = true;
     downloadButton.innerHTML = '<span class="spinner"></span> <span>Loading category...</span>';
   }
+  if (htmlDownloadButton) htmlDownloadButton.disabled = true;
 
   let catalog;
   try {
-    catalog = await Promise.any([
-      withTimeout(fetchCatalogFromApi(slug), 30000),
-      withTimeout(fetchCatalogFromSupabase(slug), 20000)
-    ]);
-  } catch (error) {
+    catalog = await withTimeout(fetchCatalogFromApi(slug), 45000);
+  } catch (apiError) {
+    try {
+      catalog = await withTimeout(fetchTeaserFromSupabase(slug), 20000);
+    } catch (fallbackError) {
     if (grid) {
       grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
         <i class="fa-solid fa-triangle-exclamation"></i>
@@ -86,12 +91,16 @@ async function loadCategory(slug) {
     }
     showToast('Could not load this category. Please try again.', 'error');
     return;
+    }
   }
 
   const cat = catalog.category;
   const styles = catalog.styles;
   currentCategorySlug = cat.slug || slug;
   currentCategoryName = cat.name || 'Category';
+  currentCatalogHasAccess = !!catalog.has_access;
+  currentCatalogIsTeaser = !!catalog.is_teaser;
+  currentTotalStyles = Number(catalog.total_styles) || styles.length;
 
   document.title = `${cat.name} | Abdalla Eissa for Design`;
   document.getElementById('breadcrumbCategory').textContent = cat.name;
@@ -111,9 +120,11 @@ async function loadCategory(slug) {
   renderStyles();
   hydratePromptCache(styles);
 
-  const hasPremium = styles.some(s => s.is_premium);
-  if (!isPremium() && hasPremium) {
-    document.getElementById('upgradeBanner').style.display = 'block';
+  if (currentCatalogIsTeaser) {
+    const banner = document.getElementById('upgradeBanner');
+    banner.style.display = 'block';
+    const link = banner.querySelector('a');
+    if (link) link.href = `pricing.html?category_slug=${encodeURIComponent(currentCategorySlug)}`;
   }
 }
 
@@ -125,7 +136,9 @@ function withTimeout(promise, milliseconds) {
 }
 
 async function fetchCatalogFromApi(slug) {
-  const response = await fetch(`${API_URL}/api/prompts/categories/${encodeURIComponent(slug)}/catalog`);
+  const response = await fetch(`${API_URL}/api/prompts/categories/${encodeURIComponent(slug)}/catalog`, {
+    headers: await getAuthHeaders()
+  });
   const data = await response.json();
   if (!response.ok || !data.category || !Array.isArray(data.styles)) {
     throw new Error(data.detail || 'Catalog API failed');
@@ -133,7 +146,7 @@ async function fetchCatalogFromApi(slug) {
   return data;
 }
 
-async function fetchCatalogFromSupabase(slug) {
+async function fetchTeaserFromSupabase(slug) {
   const { data: category, error: categoryError } = await sb
     .from('categories')
     .select('id, name, slug, icon, description')
@@ -142,33 +155,44 @@ async function fetchCatalogFromSupabase(slug) {
     .single();
   if (categoryError || !category) throw categoryError || new Error('Category not found');
 
-  const { data: styles, error: stylesError } = await sb
+  const { data: styles, error: stylesError, count } = await sb
     .from('ad_styles')
-    .select('id, category_id, title, image_url, tags, is_premium, description, view_count, created_at, prompt_preview')
+    .select('id, category_id, title, image_url, tags, is_premium, description, view_count, created_at, prompt_preview', { count: 'exact' })
     .eq('category_id', category.id)
     .eq('is_active', true)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(5);
   if (stylesError || !styles) throw stylesError || new Error('Styles could not load');
-  return { category, styles };
+  return { category, styles, total_styles: count || styles.length, has_access: false, is_teaser: true, teaser_limit: 5 };
 }
 
 function configureCategoryDownload() {
-  const button = document.getElementById('downloadCategoryBtn');
-  if (!button) return;
-  const locked = allStyles.some(style => !canAccessStyle(style));
-  button.disabled = false;
-  button.dataset.locked = locked ? 'true' : 'false';
-  button.title = locked
-    ? 'Unlock this category to download the complete pack'
-    : `Download all ${currentCategoryName} images and prompts`;
-  button.innerHTML = locked
-    ? '<i class="fa-solid fa-lock"></i> <span>Unlock Category Pack</span>'
-    : '<i class="fa-solid fa-file-arrow-down"></i> <span>Download Category Pack</span>';
-  button.onclick = downloadCategoryPackage;
+  const pdfButton = document.getElementById('downloadCategoryBtn');
+  const htmlButton = document.getElementById('downloadHtmlBtn');
+  if (!pdfButton || !htmlButton) return;
+  const locked = !currentCatalogHasAccess;
+  [pdfButton, htmlButton].forEach(button => {
+    button.disabled = false;
+    button.dataset.locked = locked ? 'true' : 'false';
+  });
+  pdfButton.title = locked
+    ? 'Unlock this category to download the PDF catalog'
+    : `Download the printable ${currentCategoryName} PDF catalog`;
+  htmlButton.title = locked
+    ? 'Unlock this category to download the interactive catalog'
+    : `Download the offline ${currentCategoryName} image and prompt catalog`;
+  pdfButton.innerHTML = locked
+    ? '<i class="fa-solid fa-lock"></i> <span>Unlock PDF Catalog</span>'
+    : '<i class="fa-solid fa-file-pdf"></i> <span>Download PDF Catalog</span>';
+  htmlButton.innerHTML = locked
+    ? '<i class="fa-solid fa-lock"></i> <span>Unlock Interactive Catalog</span>'
+    : '<i class="fa-solid fa-window-restore"></i> <span>Interactive HTML</span>';
+  pdfButton.onclick = () => downloadCategoryPackage('pdf');
+  htmlButton.onclick = () => downloadCategoryPackage('html');
 }
 
-async function downloadCategoryPackage() {
-  const button = document.getElementById('downloadCategoryBtn');
+async function downloadCategoryPackage(format = 'pdf') {
+  const button = document.getElementById(format === 'html' ? 'downloadHtmlBtn' : 'downloadCategoryBtn');
   if (!button || button.disabled) return;
   if (button.dataset.locked === 'true') {
     window.location.href = `pricing.html?category_slug=${encodeURIComponent(currentCategorySlug)}`;
@@ -177,13 +201,13 @@ async function downloadCategoryPackage() {
 
   const originalHtml = button.innerHTML;
   button.disabled = true;
-  button.innerHTML = '<span class="spinner"></span> <span>Building your pack...</span>';
+  button.innerHTML = `<span class="spinner"></span> <span>Building ${format.toUpperCase()} catalog...</span>`;
   try {
-    const response = await fetch(`${API_URL}/api/prompts/categories/${encodeURIComponent(currentCategorySlug)}/download`, {
+    const response = await fetch(`${API_URL}/api/prompts/categories/${encodeURIComponent(currentCategorySlug)}/download?format=${encodeURIComponent(format)}`, {
       headers: await getAuthHeaders()
     });
     if (!response.ok) {
-      let message = 'Could not build the category pack';
+      let message = 'Could not build the interactive catalog';
       try {
         const data = await response.json();
         message = data.detail || message;
@@ -193,7 +217,7 @@ async function downloadCategoryPackage() {
     const blob = await response.blob();
     const disposition = response.headers.get('content-disposition') || '';
     const match = disposition.match(/filename="?([^";]+)"?/i);
-    const filename = match?.[1] || `${currentCategorySlug}-prompt-pack.zip`;
+    const filename = match?.[1] || `${currentCategorySlug}-prompt-catalog.${format === 'html' ? 'html' : 'pdf'}`;
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -202,9 +226,9 @@ async function downloadCategoryPackage() {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    showToast('Category pack downloaded successfully.', 'success');
+    showToast(`${format.toUpperCase()} catalog downloaded successfully.`, 'success');
   } catch (error) {
-    showToast(error.message || 'Could not download the category pack.', 'error');
+    showToast(error.message || 'Could not download the interactive catalog.', 'error');
   } finally {
     button.disabled = false;
     button.innerHTML = originalHtml;
@@ -231,7 +255,11 @@ function renderStyles() {
   filtered = sortStyles(filtered);
   grid.classList.toggle('styles-list', currentView === 'list');
   const count = document.getElementById('resultsCount');
-  if (count) count.textContent = `${filtered.length} style${filtered.length === 1 ? '' : 's'}`;
+  if (count) {
+    count.textContent = currentCatalogIsTeaser
+      ? `${filtered.length} teaser styles of ${currentTotalStyles}`
+      : `${filtered.length} style${filtered.length === 1 ? '' : 's'}`;
+  }
 
   if (!filtered.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
@@ -243,7 +271,6 @@ function renderStyles() {
   }
 
   grid.innerHTML = filtered.map(style => {
-    const isPrem = style.is_premium;
     const userHasAccess = canAccessStyle(style);
     const seed = style.id.slice(0, 8);
     const promptReady = promptCache.has(style.id);
@@ -274,14 +301,14 @@ function renderStyles() {
           ${(style.tags || []).slice(0, 3).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
         </div>
         <div class="style-card-actions">
-          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); quickCopyPrompt('${style.id}')" ${userHasAccess ? '' : 'disabled'}>
-            <i class="fa-regular fa-copy"></i> ${promptReady ? 'Copy' : 'Open'}
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); ${userHasAccess ? `quickCopyPrompt('${style.id}')` : `svOpen('${style.id}')`}">
+            <i class="fa-regular ${userHasAccess ? 'fa-copy' : 'fa-eye'}"></i> ${userHasAccess ? (promptReady ? 'Copy Meta' : 'Open') : 'Preview'}
           </button>
           <span><i class="fa-regular fa-eye"></i> ${style.view_count || 0}</span>
         </div>
       </div>
-      ${isPrem ? '<div class="style-card-premium-badge"><i class="fa-solid fa-crown"></i> Premium</div>' : ''}
-      ${isPrem && !userHasAccess ? '<div class="style-card-lock"><i class="fa-solid fa-lock"></i></div>' : ''}
+      ${!userHasAccess ? '<div class="style-card-premium-badge"><i class="fa-solid fa-eye"></i> Teaser</div>' : ''}
+      ${!userHasAccess ? '<div class="style-card-lock"><i class="fa-solid fa-lock"></i></div>' : ''}
     </div>`;
   }).join('');
 }
@@ -330,7 +357,12 @@ async function hydratePromptCache(styles) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Could not prefetch prompts');
-      Object.entries(data.prompts || {}).forEach(([id, prompt]) => promptCache.set(id, prompt || ''));
+      Object.entries(data.prompt_details || {}).forEach(([id, details]) => {
+        promptCache.set(id, {
+          normal_prompt: details.normal_prompt || '',
+          json_prompt: details.json_prompt || ''
+        });
+      });
       renderStyles();
     } catch (err) {
       console.warn('Prompt prefetch failed:', err);
@@ -359,17 +391,14 @@ async function svOpen(id) {
     return;
   }
 
-  try {
-    sb.rpc('increment_view_count', { style_id: id }).catch(() => {});
-  } catch (e) { /* ignore */ }
-
   const userCan = (typeof canAccessStyle === 'function' && canAccessStyle(style));
   const preview = style.prompt_preview || '';
   const hasMore = !!preview;
   const seed = id.slice(0, 8);
   const loggedIn = typeof currentUser !== 'undefined' && currentUser;
   const hasCachedPrompt = promptCache.has(id);
-  const cachedPrompt = promptCache.get(id) || '';
+  const cachedDetails = promptCache.get(id) || { normal_prompt: '', json_prompt: '' };
+  const cachedPrompt = cachedDetails.normal_prompt || '';
 
   try {
     const activeStyles = visibleStyles();
@@ -385,9 +414,9 @@ async function svOpen(id) {
       >
       <div class="sv-tags">
         ${(style.tags || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
-        ${style.is_premium
-          ? '<span class="badge-premium"><i class="fa-solid fa-crown"></i> Premium</span>'
-          : '<span class="badge-free">Free</span>'}
+        ${userCan
+          ? '<span class="badge-premium"><i class="fa-solid fa-unlock"></i> Included</span>'
+          : '<span class="badge-free">Teaser</span>'}
       </div>
       <div class="sv-nav-row">
         <button class="btn btn-ghost btn-sm" onclick="svStep(-1)" ${canGoPrev ? '' : 'disabled'}>
@@ -404,7 +433,7 @@ async function svOpen(id) {
       <div class="sv-meta">
         <span><i class="fa-regular fa-eye"></i> ${style.view_count || 0} views</span>
         <span><i class="fa-regular fa-clock"></i> ${timeAgo(style.created_at)}</span>
-        ${style.is_premium ? '<span style="color:#f59e0b;"><i class="fa-solid fa-crown"></i> Premium</span>' : ''}
+        ${userCan ? '<span style="color:#34d399;"><i class="fa-solid fa-circle-check"></i> Prompt access</span>' : ''}
       </div>
 
       <div class="prompt-block">
@@ -416,14 +445,19 @@ async function svOpen(id) {
                   ? escapeHtml(cachedPrompt)
                   : '<span class="spinner"></span> Loading prompt...'
               }</div>
-             <button class="btn btn-primary prompt-copy-btn" id="svCopyBtn" onclick="svCopyPrompt()" ${hasCachedPrompt && cachedPrompt ? '' : 'disabled'}>
-               <i class="fa-regular fa-copy"></i> Copy Prompt
-             </button>`
+             <div class="prompt-action-row">
+               <button class="btn btn-primary prompt-copy-btn" id="svCopyBtn" onclick="svCopyPrompt()" ${hasCachedPrompt && cachedPrompt ? '' : 'disabled'}>
+                 <i class="fa-regular fa-copy"></i> Copy Meta Prompt
+               </button>
+               <button class="btn btn-outline prompt-copy-btn" id="svJsonBtn" onclick="svDownloadJson()" ${hasCachedPrompt && cachedDetails.json_prompt ? '' : 'disabled'}>
+                 <i class="fa-solid fa-file-arrow-down"></i> Download JSON
+               </button>
+             </div>`
           : `<div class="prompt-text blurred">${escapeHtml(preview)}${hasMore ? '…' : ''}</div>
              <div class="prompt-locked-overlay">
-               <p><i class="fa-solid fa-lock"></i> Upgrade to access the full prompt</p>
+               <p><i class="fa-solid fa-lock"></i> This image is a teaser. Unlock this category to access its prompts.</p>
                <a href="pricing.html?category_slug=${encodeURIComponent(currentCategorySlug)}" class="btn btn-primary">
-                 <i class="fa-solid fa-crown"></i> Unlock with Premium
+                 <i class="fa-solid fa-key"></i> Unlock This Category
                </a>
                ${!loggedIn
                  ? `<a href="auth.html?tab=signup&back=${encodeURIComponent(window.location.href)}" class="btn btn-outline btn-sm">Sign up free to preview</a>`
@@ -464,8 +498,14 @@ async function svOpen(id) {
 }
 
 function svCopyPrompt() {
-  const text = document.getElementById('svPromptText')?.textContent;
-  if (text && !text.includes('Loading prompt')) copyToClipboard(text);
+  const details = promptCache.get(currentStyleId);
+  if (details?.normal_prompt) copyToClipboard(details.normal_prompt);
+}
+
+function svDownloadJson() {
+  const details = promptCache.get(currentStyleId);
+  const style = allStyles.find(item => item.id === currentStyleId);
+  downloadJsonPromptFile(style?.title || 'prompt', details?.json_prompt || '');
 }
 
 async function quickCopyPrompt(id) {
@@ -473,8 +513,8 @@ async function quickCopyPrompt(id) {
     await svOpen(id);
     return;
   }
-  const prompt = promptCache.get(id);
-  if (prompt) copyToClipboard(prompt);
+  const details = promptCache.get(id);
+  if (details?.normal_prompt) copyToClipboard(details.normal_prompt);
 }
 
 async function svPrefetchPrompt(id) {
@@ -494,21 +534,28 @@ async function svFetchPrompt(id) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || 'Could not load prompt');
-  const prompt = data.prompt || '';
-  promptCache.set(id, prompt);
-  return prompt;
+  const details = {
+    normal_prompt: data.normal_prompt || data.prompt || '',
+    json_prompt: data.json_prompt || ''
+  };
+  promptCache.set(id, details);
+  return details;
 }
 
 async function svLoadPrompt(id) {
   const promptEl = document.getElementById('svPromptText');
   const copyBtn = document.getElementById('svCopyBtn');
+  const jsonBtn = document.getElementById('svJsonBtn');
   try {
-    const prompt = await svFetchPrompt(id);
+    const details = await svFetchPrompt(id);
     if (promptEl) {
-      promptEl.textContent = prompt || 'No prompt added yet for this style.';
+      promptEl.textContent = details.normal_prompt || 'No prompt added yet for this style.';
     }
     if (copyBtn) {
-      copyBtn.disabled = !prompt;
+      copyBtn.disabled = !details.normal_prompt;
+    }
+    if (jsonBtn) {
+      jsonBtn.disabled = !details.json_prompt;
     }
   } catch (err) {
     if (promptEl) {

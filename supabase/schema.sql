@@ -24,7 +24,7 @@ create table public.ad_styles (
   image_url text not null,
   meta_prompt text not null,
   normal_prompt text,
-  json_prompt text,
+  json_prompt text not null,
   prompt_preview text,
   description text,
   tags text[] default '{}',
@@ -87,6 +87,14 @@ create table public.user_category_access (
   unique(user_id, category_id)
 );
 
+create unique index user_category_access_one_active_per_user
+  on public.user_category_access (user_id) where status = 'active';
+create index ad_styles_category_id_idx on public.ad_styles (category_id);
+create index payment_orders_user_id_idx on public.payment_orders (user_id);
+create index payment_orders_category_id_idx on public.payment_orders (category_id);
+create index prompt_views_style_id_idx on public.prompt_views (style_id);
+create index user_category_access_category_id_idx on public.user_category_access (category_id);
+
 -- ============================================================
 -- Row Level Security
 -- ============================================================
@@ -112,34 +120,28 @@ as $$
   );
 $$;
 
-grant execute on function public.is_admin_user() to anon, authenticated;
+revoke execute on function public.is_admin_user() from public, anon, authenticated;
+grant execute on function public.is_admin_user() to service_role;
 
 -- Categories: public read
 create policy "categories_public_read" on public.categories
   for select using (is_active = true);
-create policy "categories_admin_all" on public.categories
-  for all using (public.is_admin_user());
 
 -- Ad styles: public metadata read only. Column grants below hide full prompts.
 create policy "styles_public_read" on public.ad_styles
   for select using (is_active = true);
-create policy "styles_admin_all" on public.ad_styles
-  for all using (public.is_admin_user());
 
 -- Profiles: own read/update
 create policy "profiles_own_read" on public.profiles
-  for select using (auth.uid() = id);
+  for select using ((select auth.uid()) = id);
 create policy "profiles_own_update" on public.profiles
-  for update using (auth.uid() = id)
-  with check (auth.uid() = id);
-create policy "profiles_insert" on public.profiles
-  for insert with check (auth.uid() = id);
-create policy "profiles_admin_read_all" on public.profiles
-  for select using (public.is_admin_user());
+  for update using ((select auth.uid()) = id)
+  with check ((select auth.uid()) = id);
 
 -- Prompt views: own
 create policy "prompt_views_own" on public.prompt_views
-  for all using (auth.uid() = user_id);
+  for all using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 -- Payment orders: backend service role only
 create policy "payment_orders_no_client_access" on public.payment_orders
@@ -147,9 +149,7 @@ create policy "payment_orders_no_client_access" on public.payment_orders
 
 -- Category access: users may read their own access; writes go through backend service role/admin API.
 create policy "category_access_own_read" on public.user_category_access
-  for select using (auth.uid() = user_id);
-create policy "category_access_admin_all" on public.user_category_access
-  for all using (public.is_admin_user());
+  for select using ((select auth.uid()) = user_id);
 
 -- ============================================================
 -- Auto-create profile on signup
@@ -178,11 +178,12 @@ create trigger on_auth_user_created
 create or replace function public.increment_view_count(style_id uuid)
 returns void as $$
   update public.ad_styles set view_count = view_count + 1 where id = style_id;
-$$ language sql security definer;
+$$ language sql security definer set search_path = public;
 
 create or replace function public.set_prompt_preview()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.meta_prompt := coalesce(nullif(new.meta_prompt, ''), nullif(new.normal_prompt, ''), '');
@@ -222,7 +223,12 @@ begin
 end;
 $$;
 
+revoke execute on function public.ensure_profile() from public, anon;
 grant execute on function public.ensure_profile() to authenticated;
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function public.set_prompt_preview() from public, anon, authenticated;
+revoke execute on function public.increment_view_count(uuid) from public, anon, authenticated;
+grant execute on function public.increment_view_count(uuid) to service_role;
 
 -- Browser clients must never read full prompt bodies directly from Supabase.
 revoke select on public.ad_styles from anon, authenticated;

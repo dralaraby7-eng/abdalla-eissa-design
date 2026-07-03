@@ -4,7 +4,7 @@
 
 let currentUser = null;
 let currentProfile = null;
-let currentAccess = { all_access: false, category_ids: [] };
+let currentAccess = { all_access: false, category_ids: [], categories: [] };
 
 async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
@@ -18,7 +18,7 @@ async function initAuth() {
   sb.auth.onAuthStateChange(async (_event, session) => {
     currentUser = session?.user || null;
     currentProfile = currentUser ? await fetchProfile(currentUser.id) : null;
-    currentAccess = currentUser ? await fetchAccessSummary() : { all_access: false, category_ids: [] };
+    currentAccess = currentUser ? await fetchAccessSummary() : { all_access: false, category_ids: [], categories: [] };
     renderNavAuth();
   });
 }
@@ -59,15 +59,16 @@ async function fetchAccessSummary() {
     const res = await fetch(`${API_URL}/api/prompts/access`, {
       headers: await getAuthHeaders()
     });
-    if (!res.ok) return { all_access: false, category_ids: [] };
+    if (!res.ok) return { all_access: false, category_ids: [], categories: [] };
     const data = await res.json();
     return {
       all_access: !!data.all_access,
-      category_ids: Array.isArray(data.category_ids) ? data.category_ids : []
+      category_ids: Array.isArray(data.category_ids) ? data.category_ids : [],
+      categories: Array.isArray(data.categories) ? data.categories : []
     };
   } catch (e) {
     console.warn('Access summary failed:', e);
-    return { all_access: false, category_ids: [] };
+    return { all_access: false, category_ids: [], categories: [] };
   }
 }
 
@@ -78,7 +79,7 @@ function hasCategoryAccess(categoryId) {
 }
 
 function canAccessStyle(style) {
-  return isAdmin() || isPremium() || !style?.is_premium || hasCategoryAccess(style?.category_id);
+  return isAdmin() || isPremium() || hasCategoryAccess(style?.category_id);
 }
 
 function renderNavAuth() {
@@ -92,7 +93,9 @@ function renderNavAuth() {
     const initial = escapeHtml(name.charAt(0).toUpperCase());
     const planBadge = isPremium()
       ? '<span class="badge-premium">Premium</span>'
-      : '<span class="badge-free">Free</span>';
+      : currentAccess.category_ids.length
+        ? '<span class="badge-premium">Category</span>'
+        : '<span class="badge-free">Free</span>';
     actionsEl.innerHTML = `
       <div class="nav-user">
         <div class="nav-avatar">${initial}</div>

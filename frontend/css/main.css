@@ -525,7 +525,10 @@ input, textarea, select { font-family: inherit; outline: none; border: none; }
   color: var(--white);
 }
 .gallery-title-row p { color: var(--text-secondary); font-size: 0.9rem; }
-.category-download-btn { margin-left: auto; }
+.category-download-actions { margin-left: auto; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.category-download-btn { margin-left: 0; }
+.prompt-action-row { display: flex; gap: 0.65rem; flex-wrap: wrap; }
+.prompt-action-row .btn { flex: 1 1 180px; justify-content: center; }
 
 .gallery-filters {
   display: flex;
@@ -1726,5 +1729,6 @@ textarea.form-input { resize: vertical; min-height: 120px; }
   .sv-image-col { padding: 1rem; }
   .sv-content-col { padding: 1rem; }
   .sv-modal { border-radius: var(--radius-lg); }
-  .category-download-btn { width: 100%; margin-left: 0; justify-content: center; }
+  .category-download-actions { width: 100%; margin-left: 0; }
+  .category-download-btn { flex: 1 1 100%; width: 100%; justify-content: center; }
 }

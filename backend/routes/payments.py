@@ -3,9 +3,10 @@ import hashlib
 import hmac
 import requests
 import uuid
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from auth_utils import get_current_user, get_supabase
+from auth_utils import get_current_user, get_profile, get_supabase, profile_has_premium
 from rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
@@ -91,12 +92,17 @@ async def create_order(body: OrderRequest, request: Request):
         raise HTTPException(status_code=400, detail="Authenticated user has no email")
 
     sb = get_supabase()
+    profile = get_profile(user.id)
     billing = body.billing or "all_access_lifetime_egp"
     category_id = None
     access_scope = "all"
     if billing in {"lifetime_egp", "all_access_lifetime_egp", "all_access"}:
+        if profile_has_premium(profile):
+            raise HTTPException(status_code=409, detail="This account already has Premium access")
         amount = PRICE_ALL_ACCESS_EGP
     elif billing in {"category_lifetime_egp", "category"}:
+        if profile_has_premium(profile):
+            raise HTTPException(status_code=409, detail="Premium already includes every category")
         if not body.category_slug:
             raise HTTPException(status_code=400, detail="category_slug is required for category purchases")
         cat_result = (
@@ -111,6 +117,29 @@ async def create_order(body: OrderRequest, request: Request):
         if not cat_rows:
             raise HTTPException(status_code=404, detail="Category not found")
         category_id = cat_rows[0]["id"]
+        existing_result = (
+            sb.table("user_category_access")
+            .select("category_id, expires_at")
+            .eq("user_id", user.id)
+            .eq("status", "active")
+            .execute()
+        )
+        now = datetime.now(timezone.utc)
+        active_rows = []
+        for row in existing_result.data or []:
+            expires_at = row.get("expires_at")
+            if not expires_at:
+                active_rows.append(row)
+                continue
+            try:
+                if datetime.fromisoformat(str(expires_at).replace("Z", "+00:00")) > now:
+                    active_rows.append(row)
+            except ValueError:
+                continue
+        if any(row.get("category_id") == category_id for row in active_rows):
+            raise HTTPException(status_code=409, detail="This account already owns this category")
+        if active_rows:
+            raise HTTPException(status_code=409, detail="Standard accounts can own one category. Upgrade to Premium for all categories.")
         access_scope = "category"
         amount = PRICE_CATEGORY_EGP
     else:
@@ -207,6 +236,9 @@ async def payment_webhook(request: Request):
         raise HTTPException(status_code=400, detail="Payment verification failed")
 
     if pending_order.get("access_scope") == "category" and pending_order.get("category_id"):
+        supabase.table("user_category_access").update({
+            "status": "revoked",
+        }).eq("user_id", pending_order["user_id"]).eq("status", "active").neq("category_id", pending_order["category_id"]).execute()
         supabase.table("user_category_access").upsert({
             "user_id": pending_order["user_id"],
             "category_id": pending_order["category_id"],

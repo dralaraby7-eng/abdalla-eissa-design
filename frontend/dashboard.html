@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/main.css?v=15">
 </head>
 <body>
 
@@ -35,8 +35,8 @@
 <div id="toastContainer" class="toast-container"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/config.js?v=12"></script>
-<script src="js/auth.js?v=6"></script>
+<script src="js/config.js?v=15"></script>
+<script src="js/auth.js?v=15"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
   await initAuth();
@@ -47,6 +47,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 function renderDashboard() {
   const p = currentProfile;
   const premium = isPremium();
+  const categoryPlans = currentAccess?.categories || [];
+  const hasCategoryPlan = categoryPlans.length > 0;
   const name = p?.full_name || currentUser.email.split('@')[0];
   const expiresAt = p?.subscription_expires_at
     ? new Date(p.subscription_expires_at).toLocaleDateString()
@@ -60,7 +62,11 @@ function renderDashboard() {
         <p style="color:var(--text-muted);font-size:0.875rem;">${escapeHtml(currentUser.email)}</p>
       </div>
       <div style="margin-left:auto;">
-        ${premium ? '<span class="badge-premium" style="font-size:0.8rem;padding:5px 14px;"><i class="fa-solid fa-crown"></i> Premium</span>' : '<span class="badge-free" style="font-size:0.8rem;padding:5px 14px;">Free Plan</span>'}
+        ${premium
+          ? '<span class="badge-premium" style="font-size:0.8rem;padding:5px 14px;"><i class="fa-solid fa-crown"></i> Premium</span>'
+          : hasCategoryPlan
+            ? '<span class="badge-premium" style="font-size:0.8rem;padding:5px 14px;"><i class="fa-solid fa-folder-open"></i> Category Access</span>'
+            : '<span class="badge-free" style="font-size:0.8rem;padding:5px 14px;">Free Plan</span>'}
       </div>
     </div>
 
@@ -91,6 +97,16 @@ function renderDashboard() {
           <button onclick="handleCancelSub()" class="btn btn-danger btn-sm">
             <i class="fa-solid fa-ban"></i> Cancel Subscription
           </button>
+        </div>
+      ` : hasCategoryPlan ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+          <div>
+            <p style="color:var(--text-secondary);font-size:0.9rem;">Your account includes <strong>${escapeHtml(categoryPlans[0]?.name || 'one category')}</strong>.</p>
+            <p style="color:var(--text-muted);font-size:0.82rem;margin-top:0.25rem;">All Meta Prompts, JSON downloads, and catalogs are unlocked for this category.</p>
+          </div>
+          <a href="category.html?slug=${encodeURIComponent(categoryPlans[0]?.slug || '')}" class="btn btn-primary">
+            <i class="fa-solid fa-folder-open"></i> Open Category
+          </a>
         </div>
       ` : `
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">

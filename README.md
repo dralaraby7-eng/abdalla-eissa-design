@@ -54,7 +54,7 @@ App 1/
 1. Go to [supabase.com](https://supabase.com) → New project
 2. Open **SQL Editor** → paste contents of `supabase/schema.sql` → Run
    - This schema is security-first: browser clients can only read public prompt previews, while full prompts are returned by the FastAPI backend after access checks.
-   - If you already created the database from an older version, run `supabase/fix_rls.sql`, `supabase/fix_missing_profiles.sql`, then `supabase/security_hardening.sql`.
+   - If you already created the database from an older version, run `supabase/fix_rls.sql`, `supabase/fix_missing_profiles.sql`, `supabase/security_hardening.sql`, then `supabase/20260702_access_model_hardening.sql`.
 3. Go to **Project Settings → API** → copy your:
    - `Project URL`
    - `anon public` key  
@@ -154,20 +154,24 @@ Or drag the `frontend/` folder to [vercel.com](https://vercel.com).
 | Feature | Free | Category Pack | All Access |
 |---|---|---|
 | Browse categories | ✅ | ✅ | ✅ |
-| View style images | ✅ | ✅ | ✅ |
-| Prompt preview (140 chars) | ✅ | ✅ | ✅ |
+| View style images | 5 per category | Selected category | All categories |
+| Copy Normal meta prompt | ❌ | Selected category | All categories |
+| Download JSON prompt | ❌ | Selected category | All categories |
 | Copy full prompts in selected category | ❌ | ✅ | ✅ |
 | Copy full prompts in all categories | ❌ | ❌ | ✅ |
-| Premium-only styles | ❌ | Selected category | All categories |
+| Download category PDF / HTML catalog | ❌ | Selected category | All categories |
 
 Backend access checks are enforced in `/api/prompts/*`. The frontend lock UI is only a visual hint; it is not the security boundary.
 
 ### Category Delivery Pack
 
-Users with access to every style in a category can download one ZIP from the
-category page. It contains the source images, `prompts.csv`, an offline visual
-`catalog.html`, and a short `README.txt`. Image downloads are restricted to the
-configured Supabase host plus optional `IMAGE_DOWNLOAD_HOSTS` entries.
+Users with access to a category can download either a selectable-text PDF or a
+self-contained interactive HTML catalog. Both formats place each reference image
+beside its Normal and JSON prompts. The HTML catalog adds dedicated copy buttons
+and offline search; it embeds all images and uses a restrictive Content Security
+Policy that blocks external requests, frames, forms, and remote scripts. Image
+downloads are restricted to safe raster formats from the configured Supabase
+host plus optional `IMAGE_DOWNLOAD_HOSTS` entries.
 
 In production, Render must include the exact Vercel site URL in its CORS
 allowlist. The application also includes the canonical production URL as a

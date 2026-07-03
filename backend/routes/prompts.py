@@ -1,23 +1,21 @@
-import csv
+import base64
+import hashlib
 import html
-import io
 import os
 import re
-import tempfile
-import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
 
 import requests
-from fastapi import APIRouter, HTTPException, Request
-from starlette.background import BackgroundTask
-from starlette.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+from starlette.responses import Response
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from auth_utils import get_current_user, get_profile, get_supabase, profile_has_premium
 from rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/api/prompts", tags=["prompts"])
+FREE_TEASER_LIMIT = 5
 
 
 class PromptBatchRequest(BaseModel):
@@ -59,8 +57,6 @@ def _user_category_ids(user_id: str) -> set[str]:
 
 
 def _has_style_access(style: dict, user, profile: dict, category_ids: set[str] | None = None) -> bool:
-    if not style.get("is_premium"):
-        return True
     if not user:
         return False
     if profile_has_premium(profile):
@@ -74,23 +70,6 @@ def _safe_filename(value: str, fallback: str) -> str:
     return cleaned[:100] or fallback
 
 
-def _image_extension(url: str, content_type: str) -> str:
-    content_extensions = {
-        "image/jpeg": ".jpg",
-        "image/png": ".png",
-        "image/webp": ".webp",
-        "image/gif": ".gif",
-    }
-    mime = (content_type or "").split(";", 1)[0].lower()
-    if mime in content_extensions:
-        return content_extensions[mime]
-    suffix = urlparse(url).path.rsplit("/", 1)[-1].lower()
-    for extension in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
-        if suffix.endswith(extension):
-            return ".jpg" if extension == ".jpeg" else extension
-    return ".jpg"
-
-
 def _download_image(style: dict) -> tuple[str, bytes, str]:
     url = style.get("image_url") or ""
     parsed = urlparse(url)
@@ -101,47 +80,199 @@ def _download_image(style: dict) -> tuple[str, bytes, str]:
         raise ValueError("Image host is not allowed")
     response = requests.get(url, timeout=(8, 30), stream=True, allow_redirects=False)
     response.raise_for_status()
-    content_type = response.headers.get("content-type", "")
-    if not content_type.lower().startswith("image/"):
-        raise ValueError("Image URL did not return an image")
+    content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
+    if content_type not in {"image/jpeg", "image/png", "image/webp", "image/gif"}:
+        raise ValueError("Image format is not allowed")
     data = bytearray()
     for chunk in response.iter_content(chunk_size=64 * 1024):
         data.extend(chunk)
         if len(data) > 15 * 1024 * 1024:
             raise ValueError("Image is larger than 15 MB")
-    extension = _image_extension(url, content_type)
-    name = _safe_filename(style.get("title") or "", style["id"])
-    return style["id"], bytes(data), f"images/{name}-{style['id'][:8]}{extension}"
+    return style["id"], bytes(data), content_type
 
 
-def _catalog_html(category_name: str, rows: list[dict]) -> str:
+def _catalog_html(category_name: str, rows: list[dict]) -> tuple[str, str]:
+    script = """(() => {
+  const search = document.getElementById('search');
+  const cards = Array.from(document.querySelectorAll('.card'));
+  const visibleCount = document.getElementById('visible-count');
+  search.addEventListener('input', () => {
+    const query = search.value.trim().toLowerCase();
+    let visible = 0;
+    cards.forEach(card => {
+      const match = !query || card.textContent.toLowerCase().includes(query);
+      card.hidden = !match;
+      if (match) visible += 1;
+    });
+    visibleCount.textContent = String(visible);
+  });
+  document.addEventListener('click', async event => {
+    const button = event.target.closest('[data-copy]');
+    if (!button) return;
+    const field = document.getElementById(button.dataset.copy);
+    if (!field) return;
+    let copied = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(field.value);
+        copied = true;
+      }
+    } catch (_) {}
+    if (!copied) {
+      field.focus();
+      field.select();
+      field.setSelectionRange(0, field.value.length);
+      copied = document.execCommand('copy');
+    }
+    const original = button.textContent;
+    button.textContent = copied ? 'Copied' : 'Select and copy';
+    setTimeout(() => { button.textContent = original; }, 1600);
+  });
+})();"""
+    script_hash = base64.b64encode(hashlib.sha256(script.encode("utf-8")).digest()).decode("ascii")
+    csp = (
+        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
+        f"script-src 'sha256-{script_hash}'; connect-src 'none'; object-src 'none'; "
+        "frame-src 'none'; form-action 'none'; base-uri 'none'"
+    )
+
     cards = []
-    for row in rows:
-        image = html.escape(row.get("local_image") or "")
+    for index, row in enumerate(rows, start=1):
+        title = html.escape(row["title"])
         normal = html.escape(row.get("normal_prompt") or "")
-        json_prompt = html.escape(row.get("json_prompt") or "")
+        json_prompt = html.escape(row.get("json_prompt") or "Not provided")
         image_markup = (
-            f'<img src="{image}" alt="{html.escape(row["title"])}">'
-            if image else '<div class="missing">Image unavailable</div>'
+            f'<img loading="lazy" src="{row["image_data_uri"]}" alt="{title}">'
+            if row.get("image_data_uri") else '<div class="missing">Image unavailable</div>'
         )
         cards.append(f"""
-        <article class="card">
-          {image_markup}
-          <div class="content">
-            <h2>{html.escape(row["title"])}</h2>
-            <h3>Normal prompt</h3><pre>{normal}</pre>
-            <h3>JSON prompt</h3><pre>{json_prompt or "Not provided"}</pre>
-          </div>
-        </article>""")
-    return f"""<!doctype html>
+    <article class="card">
+      <div class="visual">{image_markup}<span class="number">{index:03d}</span></div>
+      <div class="content">
+        <h2>{title}</h2>
+        <section class="prompt-section">
+          <div class="prompt-heading"><h3>Normal prompt</h3><button type="button" data-copy="normal-{index}">Copy Normal</button></div>
+          <textarea id="normal-{index}" readonly spellcheck="false">{normal}</textarea>
+        </section>
+        <section class="prompt-section">
+          <div class="prompt-heading"><h3>JSON prompt</h3><button type="button" data-copy="json-{index}">Copy JSON</button></div>
+          <textarea id="json-{index}" readonly spellcheck="false">{json_prompt}</textarea>
+        </section>
+      </div>
+    </article>""")
+
+    document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{html.escape(category_name)} Prompt Catalog</title>
+<meta http-equiv="Content-Security-Policy" content="{csp}"><meta name="referrer" content="no-referrer">
+<title>{html.escape(category_name)} Interactive Prompt Catalog</title>
 <style>
-body{{margin:0;background:#071426;color:#eaf2ff;font:15px Arial,sans-serif}}header{{padding:28px;max-width:1100px;margin:auto}}
-main{{max-width:1100px;margin:auto;padding:0 28px 40px}}.card{{display:grid;grid-template-columns:300px 1fr;border:1px solid #24415f;border-radius:8px;overflow:hidden;margin:0 0 24px;background:#0d2035}}
-img,.missing{{width:100%;height:300px;object-fit:cover;background:#102a45;display:flex;align-items:center;justify-content:center}}.content{{padding:20px}}h1,h2,h3{{margin-top:0}}h3{{color:#70b5ff;font-size:13px;margin:18px 0 6px}}
-pre{{white-space:pre-wrap;overflow-wrap:anywhere;background:#06111f;padding:14px;border-radius:6px;line-height:1.55;color:#dcecff}}@media(max-width:700px){{.card{{grid-template-columns:1fr}}}}
-</style></head><body><header><h1>{html.escape(category_name)} Prompt Catalog</h1><p>{len(rows)} ready-to-use product advertising styles.</p></header><main>{''.join(cards)}</main></body></html>"""
+:root{{--bg:#06111f;--panel:#0d2035;--panel2:#08182a;--line:#24415f;--text:#eaf2ff;--muted:#9bb0c7;--accent:#4da3ff;--success:#28c76f}}
+*{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--text);font:15px Arial,sans-serif;line-height:1.5}}
+header{{position:sticky;top:0;z-index:2;background:#071426;border-bottom:1px solid var(--line)}}.header-inner{{max-width:1180px;margin:auto;padding:22px 28px}}
+h1{{font-size:26px;margin:0 0 6px}}header p{{margin:0;color:var(--muted)}}.toolbar{{display:flex;align-items:center;gap:14px;margin-top:16px}}
+input{{width:100%;max-width:560px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:12px 14px;color:var(--text);font-size:15px}}
+.counter{{color:var(--muted);white-space:nowrap}}main{{max-width:1180px;margin:auto;padding:28px}}
+.card{{display:grid;grid-template-columns:minmax(280px,36%) 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:0 0 26px;background:var(--panel)}}
+.visual{{position:relative;background:var(--panel2);min-height:360px}}img,.missing{{width:100%;height:100%;min-height:360px;object-fit:contain;display:flex;align-items:center;justify-content:center;color:var(--muted)}}
+.number{{position:absolute;top:12px;left:12px;background:#06111fe6;border:1px solid var(--line);border-radius:5px;padding:5px 8px;font-size:12px}}
+.content{{padding:22px;min-width:0}}h2{{margin:0 0 20px;font-size:21px}}.prompt-section{{margin-top:18px}}.prompt-heading{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px}}
+h3{{margin:0;color:#80bdff;font-size:13px;text-transform:uppercase}}button{{border:1px solid #3478bc;border-radius:6px;background:#123b67;color:#fff;padding:8px 12px;font-weight:700;cursor:pointer}}button:hover{{background:#19528d}}
+textarea{{display:block;width:100%;min-height:150px;resize:vertical;background:#05101d;border:1px solid #1d3a57;border-radius:6px;padding:13px;color:#dcecff;font:13px/1.55 Consolas,monospace}}
+.security{{margin-top:12px;color:var(--muted);font-size:12px}}[hidden]{{display:none!important}}
+@media(max-width:760px){{.header-inner,main{{padding:18px}}.card{{grid-template-columns:1fr}}.visual,img,.missing{{min-height:280px;max-height:440px}}.toolbar{{align-items:stretch;flex-direction:column}}input{{max-width:none}}}}
+</style></head><body>
+<header><div class="header-inner"><h1>{html.escape(category_name)} Interactive Prompt Catalog</h1>
+<p>Each reference image is paired with copy-ready Normal and JSON prompts.</p>
+<div class="toolbar"><input id="search" type="search" placeholder="Search styles or prompt text" autocomplete="off"><span class="counter"><span id="visible-count">{len(rows)}</span> of {len(rows)} styles</span></div>
+<div class="security">Offline file: no external connections, forms, frames, or remote scripts are allowed.</div></div></header>
+<main>{''.join(cards)}</main><script>{script}</script></body></html>"""
+    return document, csp
+
+
+def _catalog_pdf(category_name: str, rows: list[dict]) -> bytes:
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.lib.utils import ImageReader
+    from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    output = BytesIO()
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=A4,
+        rightMargin=14 * mm,
+        leftMargin=14 * mm,
+        topMargin=14 * mm,
+        bottomMargin=16 * mm,
+        title=f"{category_name} Prompt Catalog",
+        author="Abdalla Eissa for Design",
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("CatalogTitle", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=22, leading=27, textColor=colors.HexColor("#102A43"), alignment=TA_CENTER, spaceAfter=10)
+    subtitle_style = ParagraphStyle("CatalogSubtitle", parent=styles["BodyText"], fontSize=10, leading=14, textColor=colors.HexColor("#486581"), alignment=TA_CENTER)
+    item_title = ParagraphStyle("ItemTitle", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=15, leading=19, textColor=colors.HexColor("#102A43"), spaceAfter=8)
+    label_style = ParagraphStyle("Label", parent=styles["Heading3"], fontName="Helvetica-Bold", fontSize=8, leading=10, textColor=colors.HexColor("#1473E6"), spaceBefore=4, spaceAfter=4)
+    prompt_style = ParagraphStyle("Prompt", parent=styles["BodyText"], fontName="Helvetica", fontSize=7.2, leading=9.6, textColor=colors.HexColor("#243B53"), wordWrap="CJK")
+    json_style = ParagraphStyle("JsonPrompt", parent=prompt_style, fontName="Courier", fontSize=6.4, leading=8.2, backColor=colors.HexColor("#F0F4F8"), borderPadding=7)
+
+    def safe_paragraph(value: str) -> str:
+        return html.escape(value or "").replace("\n", "<br/>")
+
+    def footer(canvas, document):
+        canvas.saveState()
+        canvas.setFillColor(colors.HexColor("#829AB1"))
+        canvas.setFont("Helvetica", 7)
+        canvas.drawString(14 * mm, 9 * mm, "Abdalla Eissa for Design - selectable copy-ready prompts")
+        canvas.drawRightString(A4[0] - 14 * mm, 9 * mm, f"Page {document.page}")
+        canvas.restoreState()
+
+    story = [
+        Spacer(1, 20 * mm),
+        Paragraph(html.escape(category_name), title_style),
+        Paragraph(f"{len(rows)} reference images paired with Normal and JSON prompts", subtitle_style),
+        Spacer(1, 8 * mm),
+        Paragraph("How to use: choose a reference image, copy its Normal prompt, attach your own product image, then replace the input placeholders.", subtitle_style),
+    ]
+
+    for index, row in enumerate(rows, start=1):
+        story.append(PageBreak())
+        image_flowable = Paragraph("Image unavailable", subtitle_style)
+        if row.get("image_bytes"):
+            image_buffer = BytesIO(row["image_bytes"])
+            reader = ImageReader(image_buffer)
+            width, height = reader.getSize()
+            scale = min((62 * mm) / width, (62 * mm) / height)
+            image_buffer.seek(0)
+            image_flowable = Image(image_buffer, width=width * scale, height=height * scale)
+
+        normal_flowables = [
+            Paragraph(f"{index:03d} - {html.escape(row['title'])}", item_title),
+            Paragraph("NORMAL / META PROMPT", label_style),
+            Paragraph(safe_paragraph(row.get("normal_prompt") or "Not provided"), prompt_style),
+        ]
+        hero = Table([[image_flowable, normal_flowables]], colWidths=[68 * mm, 105 * mm], hAlign="LEFT")
+        hero.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor("#BCCCDC")),
+            ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D9E2EC")),
+            ("BACKGROUND", (0, 0), (0, 0), colors.HexColor("#F0F4F8")),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        story.extend([
+            hero,
+            Spacer(1, 5 * mm),
+            Paragraph("JSON PROMPT", label_style),
+            Paragraph(safe_paragraph(row.get("json_prompt") or "Not provided"), json_style),
+        ])
+
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    return output.getvalue()
 
 
 @router.get("/access")
@@ -149,16 +280,58 @@ async def get_access_summary(request: Request):
     """Return a browser-safe summary of the caller's prompt access."""
     user, profile = _current_profile(request)
     if not user:
-        return {"all_access": False, "category_ids": []}
+        return {"all_access": False, "category_ids": [], "categories": []}
+    category_ids = sorted(_user_category_ids(user.id))
+    categories = []
+    if category_ids:
+        result = (
+            get_supabase().table("categories")
+            .select("id, name, slug")
+            .in_("id", category_ids)
+            .execute()
+        )
+        categories = result.data or []
     return {
         "all_access": profile_has_premium(profile),
-        "category_ids": sorted(_user_category_ids(user.id)),
+        "category_ids": category_ids,
+        "categories": categories,
     }
+
+
+@router.get("/home")
+def get_home_catalog(request: Request):
+    """Return category counts and recent teaser styles in one request."""
+    enforce_rate_limit(request, "home-catalog", limit=120, window_seconds=60)
+    sb = get_supabase()
+    categories_result = (
+        sb.table("categories")
+        .select("id, name, slug, icon, description, display_order")
+        .eq("is_active", True)
+        .order("display_order")
+        .execute()
+    )
+    styles_result = (
+        sb.table("ad_styles")
+        .select("id, category_id, title, image_url, prompt_preview, created_at")
+        .eq("is_active", True)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    styles = styles_result.data or []
+    counts = {}
+    for style in styles:
+        category_id = style.get("category_id")
+        counts[category_id] = counts.get(category_id, 0) + 1
+    categories = [
+        {**category, "style_count": counts.get(category["id"], 0)}
+        for category in categories_result.data or []
+    ]
+    return {"categories": categories, "featured_styles": styles[:8]}
 
 
 @router.get("/categories/{category_slug}/catalog")
 def get_category_catalog(category_slug: str, request: Request):
-    """Return public category metadata without exposing full prompt text."""
+    """Return five teasers or the complete entitled category catalog."""
     enforce_rate_limit(request, "category-catalog", limit=120, window_seconds=60)
     sb = get_supabase()
     category_result = (
@@ -173,6 +346,9 @@ def get_category_catalog(category_slug: str, request: Request):
     if not categories:
         raise HTTPException(status_code=404, detail="Category not found")
     category = categories[0]
+    user, profile = _current_profile(request)
+    category_ids = _user_category_ids(user.id) if user and not profile_has_premium(profile) else set()
+    has_access = bool(user and (profile_has_premium(profile) or category["id"] in category_ids))
     styles_result = (
         sb.table("ad_styles")
         .select("id, category_id, title, image_url, tags, is_premium, description, view_count, created_at, prompt_preview")
@@ -181,12 +357,25 @@ def get_category_catalog(category_slug: str, request: Request):
         .order("created_at", desc=True)
         .execute()
     )
-    return {"category": category, "styles": styles_result.data or []}
+    all_styles = styles_result.data or []
+    styles = all_styles if has_access else all_styles[:FREE_TEASER_LIMIT]
+    return {
+        "category": category,
+        "styles": styles,
+        "total_styles": len(all_styles),
+        "has_access": has_access,
+        "is_teaser": not has_access,
+        "teaser_limit": FREE_TEASER_LIMIT,
+    }
 
 
 @router.get("/categories/{category_slug}/download")
-def download_category(category_slug: str, request: Request):
-    """Build one offline ZIP containing the category images and prompt catalog."""
+def download_category(
+    category_slug: str,
+    request: Request,
+    delivery_format: str = Query("pdf", alias="format", pattern="^(pdf|html)$"),
+):
+    """Build an entitled PDF or self-contained interactive HTML catalog."""
     enforce_rate_limit(request, "category-download", limit=3, window_seconds=300)
     sb = get_supabase()
     category_result = (
@@ -224,11 +413,10 @@ def download_category(category_slug: str, request: Request):
     rows = [{
         "id": style["id"],
         "title": style.get("title") or "Untitled style",
-        "image_url": style.get("image_url") or "",
         "normal_prompt": style.get("normal_prompt") or style.get("meta_prompt") or "",
         "json_prompt": style.get("json_prompt") or "",
-        "local_image": "",
-        "image_status": "not downloaded",
+        "image_data_uri": "",
+        "image_bytes": b"",
     } for style in styles]
 
     image_results = {}
@@ -237,47 +425,43 @@ def download_category(category_slug: str, request: Request):
         for future in as_completed(futures):
             style_id = futures[future]
             try:
-                _, image_bytes, image_path = future.result()
-                image_results[style_id] = (image_bytes, image_path, "downloaded")
-            except Exception as exc:
-                image_results[style_id] = (None, "", f"failed: {str(exc)[:120]}")
+                _, image_bytes, content_type = future.result()
+                image_results[style_id] = (image_bytes, content_type)
+            except Exception:
+                image_results[style_id] = (None, "")
 
-    archive = tempfile.SpooledTemporaryFile(max_size=50 * 1024 * 1024, mode="w+b")
-    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as bundle:
-        for row in rows:
-            image_bytes, image_path, status = image_results.get(row["id"], (None, "", "failed"))
-            row["local_image"] = image_path
-            row["image_status"] = status
-            if image_bytes and image_path:
-                bundle.writestr(image_path, image_bytes)
+    for row in rows:
+        image_bytes, content_type = image_results.get(row["id"], (None, ""))
+        if image_bytes and content_type:
+            row["image_bytes"] = image_bytes
+            encoded = base64.b64encode(image_bytes).decode("ascii")
+            row["image_data_uri"] = f"data:{content_type};base64,{encoded}"
 
-        csv_buffer = io.StringIO(newline="")
-        writer = csv.DictWriter(csv_buffer, fieldnames=["id", "title", "image", "normal_prompt", "json_prompt", "category", "image_status"])
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({
-                "id": row["id"], "title": row["title"],
-                "image": row["local_image"] or row["image_url"],
-                "normal_prompt": row["normal_prompt"], "json_prompt": row["json_prompt"],
-                "category": category["name"], "image_status": row["image_status"],
-            })
-        bundle.writestr("prompts.csv", "\ufeff".encode("utf-8") + csv_buffer.getvalue().encode("utf-8"))
-        bundle.writestr("catalog.html", _catalog_html(category["name"], rows).encode("utf-8"))
-        bundle.writestr("README.txt", (
-            f"{category['name']} Prompt Pack\n\n"
-            "Open catalog.html in any browser for the visual catalog.\n"
-            "Open prompts.csv in Excel or Google Sheets for searchable prompt data.\n"
-            "The images folder contains the source style references.\n"
-            "Replace the input-product placeholders with your own product details before generation.\n"
-        ).encode("utf-8"))
+    if delivery_format == "pdf":
+        catalog_pdf = _catalog_pdf(category["name"], rows)
+        filename = f"{_safe_filename(category['slug'], 'category')}-prompt-catalog.pdf"
+        return Response(
+            content=catalog_pdf,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "private, no-store",
+            },
+        )
 
-    archive.seek(0)
-    filename = f"{_safe_filename(category['slug'], 'category')}-prompt-pack.zip"
-    return StreamingResponse(
-        archive,
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        background=BackgroundTask(archive.close),
+    catalog, csp = _catalog_html(category["name"], rows)
+    filename = f"{_safe_filename(category['slug'], 'category')}-interactive-catalog.html"
+    return Response(
+        content=catalog.encode("utf-8"),
+        media_type="text/html",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Security-Policy": csp,
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer",
+            "Cache-Control": "private, no-store",
+        },
     )
 
 

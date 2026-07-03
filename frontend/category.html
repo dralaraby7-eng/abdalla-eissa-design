@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="css/main.css?v=11">
+  <link rel="stylesheet" href="css/main.css?v=15">
 </head>
 <body>
 
@@ -54,9 +54,14 @@
         <h1 id="catName">Loading…</h1>
         <p id="catDesc" style="color:var(--text-muted);font-size:0.875rem;"></p>
       </div>
-      <button class="btn btn-primary category-download-btn" id="downloadCategoryBtn" type="button" disabled>
-        <i class="fa-solid fa-file-arrow-down"></i> <span>Preparing download</span>
-      </button>
+      <div class="category-download-actions">
+        <button class="btn btn-primary category-download-btn" id="downloadCategoryBtn" type="button" disabled>
+          <i class="fa-solid fa-file-pdf"></i> <span>Preparing PDF</span>
+        </button>
+        <button class="btn btn-outline category-download-btn" id="downloadHtmlBtn" type="button" disabled>
+          <i class="fa-solid fa-window-restore"></i> <span>Interactive HTML</span>
+        </button>
+      </div>
     </div>
 
     <!-- Filters -->
@@ -64,11 +69,6 @@
       <div class="search-box">
         <i class="fa-solid fa-magnifying-glass"></i>
         <input type="text" id="searchInput" placeholder="Search styles…" autocomplete="off">
-      </div>
-      <div class="filter-btns">
-        <button class="filter-btn active" data-filter="all">All</button>
-        <button class="filter-btn" data-filter="free">Free</button>
-        <button class="filter-btn" data-filter="premium"><i class="fa-solid fa-crown" style="font-size:0.7rem;"></i> Premium</button>
       </div>
       <div class="gallery-controls">
         <span class="results-count" id="resultsCount">0 styles</span>
@@ -108,8 +108,8 @@
     <div class="upgrade-banner">
       <i class="fa-solid fa-crown" style="font-size:2.5rem;color:#f59e0b;margin-bottom:1rem;display:block;"></i>
       <h3>Unlock All Prompts in This Category</h3>
-      <p>Premium styles are unlocked with a membership. Get unlimited access to all prompts.</p>
-      <a href="pricing.html" class="btn btn-primary btn-lg"><i class="fa-solid fa-crown"></i> Upgrade to Premium</a>
+      <p>Free accounts can preview five images. Unlock this category for every prompt and both catalog downloads.</p>
+      <a href="pricing.html" class="btn btn-primary btn-lg"><i class="fa-solid fa-key"></i> Unlock This Category</a>
     </div>
   </div>
 
@@ -139,8 +139,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/config.js?v=12"></script>
-<script src="js/auth.js?v=10"></script>
-<script src="js/category.js?v=13"></script>
+<script src="js/config.js?v=15"></script>
+<script src="js/auth.js?v=15"></script>
+<script src="js/category.js?v=15"></script>
 </body>
 </html>

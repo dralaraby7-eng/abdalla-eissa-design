@@ -40,11 +40,11 @@ async function loadStyle(id) {
     cat = data;
   }
 
-  // Track view count (fire and forget)
-  sb.rpc('increment_view_count', { style_id: id }).catch(() => {});
-
   const userCan = canAccessStyle(style);
   let promptText = '';
+  let promptError = '';
+  window.currentJsonPrompt = '';
+  window.currentStyleTitle = style.title;
   if (userCan) {
     try {
       const res = await fetch(`${API_URL}/api/prompts/${encodeURIComponent(id)}`, {
@@ -55,7 +55,8 @@ async function loadStyle(id) {
       promptText = data.normal_prompt || data.prompt || '';
       window.currentJsonPrompt = data.json_prompt || '';
     } catch (err) {
-      showToast(err.message || 'Could not load prompt.', 'error');
+      promptError = err.message || 'Could not load prompt.';
+      showToast(promptError, 'error');
     }
   }
   const preview = style.prompt_preview || '';
@@ -81,7 +82,7 @@ async function loadStyle(id) {
         >
         <div style="display:flex;gap:0.6rem;margin-top:0.75rem;flex-wrap:wrap;">
           ${(style.tags || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
-          ${style.is_premium ? '<span class="badge-premium"><i class="fa-solid fa-crown"></i> Premium</span>' : '<span class="badge-free">Free</span>'}
+          ${userCan ? '<span class="badge-premium"><i class="fa-solid fa-unlock"></i> Included</span>' : '<span class="badge-free">Teaser</span>'}
         </div>
       </div>
 
@@ -91,7 +92,7 @@ async function loadStyle(id) {
         <div class="prompt-meta">
           <span><i class="fa-regular fa-eye"></i> ${style.view_count || 0} views</span>
           <span><i class="fa-regular fa-clock"></i> ${timeAgo(style.created_at)}</span>
-          ${style.is_premium ? '<span style="color:#f59e0b;"><i class="fa-solid fa-crown"></i> Premium style</span>' : ''}
+          ${userCan ? '<span style="color:#34d399;"><i class="fa-solid fa-circle-check"></i> Prompt access</span>' : ''}
         </div>
 
         ${style.description ? `<p style="color:var(--text-secondary);font-size:0.875rem;line-height:1.7;margin-bottom:1.5rem;">${escapeHtml(style.description)}</p>` : ''}
@@ -101,21 +102,24 @@ async function loadStyle(id) {
           <div class="prompt-block-label"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Meta Prompt</div>
 
           ${userCan
-            ? promptText
-              ? `<div class="prompt-tabs" style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">
-                   <button class="btn btn-sm btn-outline" onclick="showPromptTab('normal')">Normal</button>
-                   <button class="btn btn-sm btn-outline" onclick="showPromptTab('json')" ${window.currentJsonPrompt ? '' : 'disabled'}>JSON</button>
-                 </div>
-                 <div class="prompt-text" id="promptText" data-normal-prompt="${escapeHtml(promptText)}">${escapeHtml(promptText)}</div>
-                 <button class="btn btn-primary btn-sm prompt-copy-btn" onclick="copyPromptText()">
-                   <i class="fa-regular fa-copy"></i> Copy
-                 </button>`
+            ? promptError
+              ? `<div class="prompt-error"><strong>Prompt could not load.</strong><span>${escapeHtml(promptError)}</span><button class="btn btn-outline btn-sm" onclick="loadStyle('${id}')">Try again</button></div>`
+              : promptText
+              ? `<div class="prompt-text" id="promptText">${escapeHtml(promptText)}</div>
+                 <div class="prompt-action-row">
+                   <button class="btn btn-primary prompt-copy-btn" onclick="copyPromptText()">
+                     <i class="fa-regular fa-copy"></i> Copy Meta Prompt
+                   </button>
+                   <button class="btn btn-outline prompt-copy-btn" onclick="downloadCurrentJsonPrompt()" ${window.currentJsonPrompt ? '' : 'disabled'}>
+                     <i class="fa-solid fa-file-arrow-down"></i> Download JSON
+                   </button>
+                 </div>`
               : `<div style="color:var(--text-muted);font-size:0.85rem;padding:1rem 0;">No prompt added yet for this style.</div>`
             : `<div class="prompt-text blurred" id="promptText">${escapeHtml(preview)}${hasMore ? '…' : ''}</div>
                <div class="prompt-locked-overlay">
-                 <p><i class="fa-solid fa-lock"></i> Upgrade to access the full prompt</p>
+                 <p><i class="fa-solid fa-lock"></i> Unlock this category to access the full prompt and JSON file.</p>
                  <a href="pricing.html${cat?.slug ? `?category_slug=${encodeURIComponent(cat.slug)}` : ''}" class="btn btn-primary">
-                   <i class="fa-solid fa-crown"></i> Unlock with Premium
+                   <i class="fa-solid fa-key"></i> Unlock This Category
                  </a>
                  ${!currentUser ? `<a href="auth.html?tab=signup&back=${encodeURIComponent(window.location.href)}" class="btn btn-outline btn-sm">Sign up free to preview</a>` : ''}
                </div>`
@@ -136,7 +140,7 @@ async function loadStyle(id) {
 
         ${!userCan ? `<div style="margin-top:1.5rem;">
           <a href="pricing.html${cat?.slug ? `?category_slug=${encodeURIComponent(cat.slug)}` : ''}" class="btn btn-primary" style="width:100%;justify-content:center;">
-            <i class="fa-solid fa-crown"></i> Get Premium — Full Access
+            <i class="fa-solid fa-key"></i> Unlock This Category
           </a>
         </div>` : ''}
 
@@ -152,16 +156,10 @@ async function loadStyle(id) {
 }
 
 function copyPromptText() {
-  const text = document.getElementById('promptText')?.textContent;
-  if (text) copyToClipboard(text);
+  const text = document.getElementById('promptText')?.textContent || '';
+  copyToClipboard(text);
 }
 
-function showPromptTab(tab) {
-  const el = document.getElementById('promptText');
-  if (!el) return;
-  if (tab === 'json' && window.currentJsonPrompt) {
-    el.textContent = window.currentJsonPrompt;
-  } else {
-    el.textContent = el.dataset.normalPrompt || el.textContent;
-  }
+function downloadCurrentJsonPrompt() {
+  downloadJsonPromptFile(window.currentStyleTitle || 'prompt', window.currentJsonPrompt || '');
 }

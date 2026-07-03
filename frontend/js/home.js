@@ -4,8 +4,7 @@ let categorySearch = '';
 
 document.addEventListener('DOMContentLoaded', async () => {
   await initAuth();
-  await loadCategories();
-  await loadFeaturedStyles();
+  await loadHomeData();
 
   document.getElementById('categorySearch')?.addEventListener('input', e => {
     categorySearch = e.target.value.toLowerCase();
@@ -23,6 +22,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   const mobileNav = document.getElementById('mobileNav');
   hamburger?.addEventListener('click', () => mobileNav?.classList.toggle('open'));
 });
+
+async function loadHomeData() {
+  try {
+    const response = await fetch(`${API_URL}/api/prompts/home`);
+    const data = await response.json();
+    if (!response.ok || !Array.isArray(data.categories)) throw new Error(data.detail || 'Home catalog failed');
+    homeCategories = data.categories;
+    document.getElementById('statCategories').textContent = homeCategories.length;
+    document.getElementById('statStyles').textContent = `${homeCategories.reduce((sum, cat) => sum + (cat.style_count || 0), 0)}+`;
+    renderCategories();
+    await loadFeaturedStyles(data.featured_styles || []);
+  } catch (error) {
+    await loadCategories();
+    await loadFeaturedStyles();
+  }
+}
 
 async function loadCategories() {
   const grid = document.getElementById('categoriesGrid');
@@ -90,28 +105,29 @@ function renderCategories() {
   `).join('');
 }
 
-async function loadFeaturedStyles() {
+async function loadFeaturedStyles(providedStyles = null) {
   const grid = document.getElementById('featuredStylesGrid');
   if (!grid) return;
 
-  const { data: styles, error } = await sb
-    .from('ad_styles')
-    .select('id, category_id, title, image_url, is_premium, prompt_preview, created_at')
-    .eq('is_active', true)
-    .order('created_at', { ascending: false })
-    .limit(8);
+  let styles = providedStyles;
+  let error = null;
+  if (!styles) {
+    const result = await sb
+      .from('ad_styles')
+      .select('id, category_id, title, image_url, is_premium, prompt_preview, created_at')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(8);
+    styles = result.data;
+    error = result.error;
+  }
 
   if (error || !styles?.length) {
     grid.innerHTML = '';
     return;
   }
 
-  const categoryIds = [...new Set(styles.map(style => style.category_id).filter(Boolean))];
-  const { data: categories } = await sb
-    .from('categories')
-    .select('id, slug, name')
-    .in('id', categoryIds);
-  const categoriesById = Object.fromEntries((categories || []).map(cat => [cat.id, cat]));
+  const categoriesById = Object.fromEntries(homeCategories.map(cat => [cat.id, cat]));
 
   grid.innerHTML = styles.map(style => {
     const cat = categoriesById[style.category_id] || {};

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/main.css?v=15">
 </head>
 <body>
 
@@ -38,11 +38,11 @@
   <section class="hero" style="padding:4rem 2rem 3rem;">
     <div class="hero-eyebrow"><i class="fa-solid fa-crown"></i> Simple Pricing</div>
     <h1>One Payment, <span class="gradient-text">Lifetime Access</span></h1>
-    <p>Pay once and unlock all AI ad prompts forever — no monthly fees, no renewals.</p>
+    <p>Preview five styles for free, unlock one business category, or choose Premium for everything.</p>
   </section>
 
   <section class="section">
-    <div class="pricing-grid" style="max-width:960px;">
+    <div class="pricing-grid" style="max-width:1180px;">
 
       <!-- Free Plan -->
       <div class="pricing-card">
@@ -55,15 +55,35 @@
         <p class="pricing-desc">Get started with no credit card required.</p>
         <div class="pricing-features">
           <div class="pricing-feature"><i class="fa-solid fa-check"></i> Browse all 12 categories</div>
-          <div class="pricing-feature"><i class="fa-solid fa-check"></i> View all style images</div>
-          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Preview first 140 chars of any prompt</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> View 5 teaser images per category</div>
           <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> Copy full prompts</div>
-          <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> Access premium styles</div>
-          <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> New styles added regularly</div>
+          <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> Download JSON prompts</div>
+          <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> Download category catalogs</div>
         </div>
         <a href="auth.html?tab=signup" class="btn btn-outline" style="width:100%;justify-content:center;padding:0.75rem;">
           Get Started Free
         </a>
+      </div>
+
+      <!-- Single Category Plan -->
+      <div class="pricing-card" id="categoryPlanCard">
+        <div class="pricing-name">One Category</div>
+        <div class="pricing-price">
+          <span class="amount">99</span>
+          <span class="currency">EGP</span>
+          <span class="period">one-time</span>
+        </div>
+        <p class="pricing-desc" id="categoryPlanDescription">Choose one category and unlock all of its current and future styles.</p>
+        <div class="pricing-features">
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> One category assigned to your account</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Copy every Meta Prompt</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Download every JSON Prompt</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> PDF and interactive HTML catalogs</div>
+          <div class="pricing-feature disabled"><i class="fa-solid fa-xmark"></i> Other categories</div>
+        </div>
+        <button onclick="handleCategoryUpgrade()" class="btn btn-outline" style="width:100%;justify-content:center;padding:0.75rem;" id="categoryUpgradeBtn">
+          Choose a Category First
+        </button>
       </div>
 
       <!-- Lifetime Premium Plan -->
@@ -104,7 +124,8 @@
         <div style="margin:1.25rem 0 1.5rem;">
         <div class="pricing-features">
           <div class="pricing-feature"><i class="fa-solid fa-check"></i> Everything in Free</div>
-          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Copy all AI prompts instantly</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Copy all Meta Prompts instantly</div>
+          <div class="pricing-feature"><i class="fa-solid fa-check"></i> Download all JSON Prompts</div>
           <div class="pricing-feature"><i class="fa-solid fa-check"></i> All 500+ ad styles unlocked</div>
           <div class="pricing-feature"><i class="fa-solid fa-check"></i> All premium styles</div>
           <div class="pricing-feature"><i class="fa-solid fa-check"></i> New styles added regularly</div>
@@ -174,33 +195,51 @@
 <div id="toastContainer" class="toast-container"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/config.js?v=12"></script>
-<script src="js/auth.js?v=6"></script>
+<script src="js/config.js?v=15"></script>
+<script src="js/auth.js?v=15"></script>
 <script>
   document.addEventListener('DOMContentLoaded', async () => {
     await initAuth();
     document.getElementById('hamburger')?.addEventListener('click', () =>
       document.getElementById('mobileNav')?.classList.toggle('open'));
     const categorySlug = getParam('category_slug');
+    const categoryButton = document.getElementById('categoryUpgradeBtn');
+    const categoryDescription = document.getElementById('categoryPlanDescription');
     if (categorySlug) {
-      const btn = document.getElementById('upgradeBtnEGP');
-      if (btn) btn.innerHTML = '<span>🇪🇬</span> Pay 99 EGP — Unlock This Category';
-      const hero = document.querySelector('.hero p');
-      if (hero) hero.textContent = `Unlock the ${categorySlug.replace(/-/g, ' ')} category only. You can upgrade to All Access later.`;
+      const label = categorySlug.replace(/-/g, ' ');
+      categoryButton.textContent = `Pay 99 EGP — Unlock ${label}`;
+      categoryDescription.textContent = `Unlock the ${label} category for this account. Standard accounts can own one category.`;
     }
   });
+
+  async function handleCategoryUpgrade() {
+    const categorySlug = getParam('category_slug');
+    if (!categorySlug) {
+      window.location.href = 'index.html#categories';
+      return;
+    }
+    await startPayment('category_lifetime_egp', categorySlug, document.getElementById('categoryUpgradeBtn'));
+  }
 
   async function handleUpgradeEGP() {
     if (!currentUser) {
       window.location.href = 'auth.html?tab=signup&back=' + encodeURIComponent(window.location.href);
       return;
     }
-    const categorySlug = getParam('category_slug');
-    if (!categorySlug && isPremium()) {
+    if (isPremium()) {
       showToast('You already have Premium! Enjoy lifetime access.', 'success');
       return;
     }
     const btn = document.getElementById('upgradeBtnEGP');
+    await startPayment('all_access_lifetime_egp', null, btn);
+  }
+
+  async function startPayment(billing, categorySlug, btn) {
+    if (!currentUser) {
+      window.location.href = 'auth.html?tab=signup&back=' + encodeURIComponent(window.location.href);
+      return;
+    }
+    const originalHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Redirecting to payment…';
 
@@ -212,7 +251,7 @@
           ...(await getAuthHeaders())
         },
         body: JSON.stringify({
-          billing: categorySlug ? 'category_lifetime_egp' : 'all_access_lifetime_egp',
+          billing,
           category_slug: categorySlug
         })
       });
@@ -225,9 +264,7 @@
     } catch (err) {
       showToast(err.message || 'Could not connect to payment server.', 'error');
       btn.disabled = false;
-      btn.innerHTML = categorySlug
-        ? '<span>🇪🇬</span> Pay 99 EGP — Unlock This Category'
-        : '<span>🇪🇬</span> Pay 250 EGP — Unlock Forever';
+      btn.innerHTML = originalHtml;
     }
   }
 </script>

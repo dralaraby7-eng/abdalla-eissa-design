@@ -4,9 +4,10 @@ admin_api.py — Admin-only backend routes
 - GET  /api/admin/users         (list users with email + plan)
 - POST /api/admin/grant-premium (grant/revoke lifetime premium)
 """
-import os
+import json
+import re
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from auth_utils import get_supabase as _get_supabase, require_admin
 
@@ -37,6 +38,14 @@ class CategoryBody(BaseModel):
     description: Optional[str] = None
     display_order: int = 0
 
+    @field_validator("slug")
+    @classmethod
+    def validate_slug(cls, value: str) -> str:
+        slug = value.strip().lower()
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+            raise ValueError("slug must contain lowercase letters, numbers, and hyphens only")
+        return slug
+
 
 class StyleBody(BaseModel):
     category_id: str
@@ -46,9 +55,31 @@ class StyleBody(BaseModel):
     meta_prompt: Optional[str] = None
     normal_prompt: Optional[str] = None
     json_prompt: Optional[str] = None
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
     is_premium: bool = False
     is_active: bool = True
+
+    @field_validator("image_url")
+    @classmethod
+    def validate_image_url(cls, value: str) -> str:
+        url = value.strip()
+        if not url.startswith("https://"):
+            raise ValueError("image_url must use HTTPS")
+        return url
+
+    @field_validator("json_prompt")
+    @classmethod
+    def validate_json_prompt(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        text = value.strip()
+        if not text:
+            raise ValueError("json_prompt is required")
+        try:
+            json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError("json_prompt must be valid JSON") from exc
+        return text
 
 
 class SetCategoryAccessBody(BaseModel):
@@ -61,6 +92,10 @@ def _style_payload(body: StyleBody) -> dict:
     data = body.model_dump()
     normal_prompt = (body.normal_prompt or body.meta_prompt or "").strip()
     json_prompt = (body.json_prompt or "").strip()
+    if not normal_prompt:
+        raise HTTPException(status_code=422, detail="normal_prompt is required")
+    if not json_prompt:
+        raise HTTPException(status_code=422, detail="json_prompt is required")
     data["normal_prompt"] = normal_prompt
     data["json_prompt"] = json_prompt
     data["meta_prompt"] = normal_prompt
@@ -143,6 +178,8 @@ async def create_user(body: CreateUserBody, request: Request):
     """Create a new user from the admin panel."""
     _verify_admin(request)
     sb = _get_supabase()
+    if len(body.password) < 10:
+        raise HTTPException(status_code=422, detail="Password must be at least 10 characters")
 
     try:
         result = sb.auth.admin.create_user({
@@ -151,8 +188,8 @@ async def create_user(body: CreateUserBody, request: Request):
             "email_confirm": True,
             "user_metadata": {"full_name": body.name}
         })
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Could not create user: {e}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not create user. Check the email and password requirements.")
 
     if not result.user:
         raise HTTPException(status_code=400, detail="User creation failed")
@@ -202,6 +239,9 @@ async def set_category_access(body: SetCategoryAccessBody, request: Request):
     sb = _get_supabase()
 
     if body.action == "grant":
+        sb.table("user_category_access").update({
+            "status": "revoked",
+        }).eq("user_id", body.user_id).eq("status", "active").neq("category_id", body.category_id).execute()
         sb.table("user_category_access").upsert({
             "user_id": body.user_id,
             "category_id": body.category_id,

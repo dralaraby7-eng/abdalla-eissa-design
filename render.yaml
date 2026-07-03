@@ -26,6 +26,12 @@ services:
         sync: false
       - key: PRICE_LIFETIME_EGP_CENTS
         value: "25000"
+      - key: PRICE_ALL_ACCESS_EGP_CENTS
+        value: "25000"
+      - key: PRICE_CATEGORY_EGP_CENTS
+        value: "9900"
+      - key: IMAGE_DOWNLOAD_HOSTS
+        value: ""
       - key: FRONTEND_URL
         value: https://abdalla-eissa-design.vercel.app
       - key: ALLOWED_ORIGINS
